@@ -107,6 +107,7 @@ class BrowserEnv:
                         continue
                     action = action_data['action']
                     obs, reward, terminated, truncated, info = env.step(action)
+
                     # EVAL only: save the rewards into file for evaluation
                     if self.eval_mode:
                         rewards.append(reward)
@@ -124,9 +125,17 @@ class BrowserEnv:
                     # obs['screenshot'] = self.image_to_jpg_base64_url(obs['screenshot'])
                     obs['active_page_index'] = obs['active_page_index'].item()
                     obs['elapsed_time'] = obs['elapsed_time'].item()
+
                     self.browser_side.send((unique_request_id, obs))
             except KeyboardInterrupt:
                 logger.info('Browser env process interrupted by user.')
+                try:
+                    env.close()
+                except Exception:
+                    pass
+                return
+            except Exception as e:
+                logger.error(f'{type(e).__name__}: {str(e)}')
                 try:
                     env.close()
                 except Exception:

@@ -1,6 +1,10 @@
 import ast
 import itertools
 import math
+
+# import multiprocessing
+# import multiprocess as mp
+import multiprocessing.dummy as mp_dummy
 import os
 import traceback
 from typing import Any, Dict, List, Optional
@@ -53,6 +57,30 @@ client = OpenAI()
 
 class ParseError(Exception):
     pass
+
+
+def sample_action(obs_history, states, strategies, actions, policy):
+    main_prompt = MyMainPrompt(
+        obs_history=obs_history,
+        states=states,
+        strategies=strategies,
+        # actions=actions,
+        actions=actions,
+    )
+    strategy = policy(main_prompt)
+    return strategy
+
+
+def sample_action_reward(obs_history, states, strategies, actions, action_reward):
+    main_prompt = MyMainPrompt(
+        obs_history=obs_history,
+        states=states,
+        strategies=strategies,
+        # actions=actions,
+        actions=actions,
+    )
+    fast_reward, think = action_reward(main_prompt)
+    return fast_reward, think
 
 
 class WorldModelAgent(Agent):
@@ -255,16 +283,18 @@ class WorldModelAgent(Agent):
         # If you encounter a situation where you need to enter personal information, stop and
         # ask the user to supply it.
         # """
-        addition = """Stop and ask the user when their own contact information is required to proceed
-with the task. Do not stop if the information is what you need to search for.
-"""
+        #         addition = """
+        # Stop and ask the user when their own information is required to proceed with the task, like name, phone, email, login credentials, and more. Do not stop if the information is what you need to search for."""
         system_msg = f"""\
 # Instructions
 Review the current state of the page and all other information to find the best possible next action to accomplish your goal. Your answer will be interpreted and executed by a program, make sure to follow the formatting instructions.
 
 # Goal:
 {self.goal}
-{addition if not override_llm else ''}
+
+Stop and ask the user when their own information is required to proceed with the task, like name, phone, email, login credentials, and more. Do not stop if the information is what you need to search for.
+
+If the goal requires you to look for information online, try to visit multiple websites to look for more comprehensive information before responding.
 
 # Action Space
 {self.action_space.describe(with_long_description=False, with_examples=True)}
@@ -276,8 +306,20 @@ You should not attempt to visit the following domains as they will block your en
 - StreetEasy: www.streeteasy.com
 - ApartmentFinder: www.apartmentfinder.com
 - Quora: www.quora.com
+- Expedia: www.expedia.com
+- TripAdvisor: www.tripadvisor.com
+- TicketMaster: www.ticketmaster.com
 If you accidentally enter any of these websites, go back and try other websites.
 """
+        scrolling_prompt = """
+scroll(delta_x: float, delta_y: float)
+    Examples:
+        scroll(0, 200)
+
+        scroll(-50.2, -100.5)
+"""
+        system_msg = system_msg.replace(scrolling_prompt, '')
+        # print(system_msg)
         messages = []
         messages.append({'role': 'system', 'content': system_msg})
         messages.append({'role': 'user', 'content': prompt})
@@ -614,33 +656,64 @@ If you accidentally enter any of these websites, go back and try other websites.
             if not node.is_terminal:
                 children = []
                 # Sample an action space:
-                action_space = {}
+                # action_space = {}
                 n_actions = 3
-                for i in range(n_actions):
-                    main_prompt = MyMainPrompt(
-                        obs_history=self.obs_history,
-                        states=self.states + new_states,
-                        strategies=self.strategies + new_actions,
-                        # actions=actions,
-                        actions=self.explanations,
-                    )
-                    strategy = self.policy(main_prompt)
-                    # action, action_dict = self.policy(main_prompt)
-                    action_space[strategy] = 1
+                # def sample_action(obs_history, states, strategies, actions, policy):
+                #     main_prompt = MyMainPrompt(
+                #         obs_history=self.obs_history,
+                #         states=self.states + new_states,
+                #         strategies=self.strategies + new_actions,
+                #         # actions=actions,
+                #         actions=self.explanations,
+                #     )
+                #     strategy = self.policy(main_prompt)
+                #     return strategy
 
-                for action, _ in action_space.items():
-                    # TODO (DONE): Figrue out how fast reward is computed
-                    # fast_reward = 0
-                    # print(self.states + new_states)
-                    # print(self.actions + new_actions)
-                    main_prompt = MyMainPrompt(
-                        obs_history=self.obs_history,
-                        states=self.states + new_states,
-                        strategies=self.strategies + new_actions + [action],
-                        # actions=actions,
-                        actions=self.explanations,
+                # Create a pool of worker processes
+                with mp_dummy.Pool(processes=n_actions) as pool:
+                    # Use starmap to pass multiple arguments to the function
+                    arguments = [
+                        (
+                            self.obs_history,
+                            self.states + new_states,
+                            self.strategies + new_actions,
+                            self.explanations,
+                            self.policy,
+                        )
+                    ] * n_actions
+                    sampled_actions = pool.starmap(sample_action, arguments)
+
+                sampled_actions = list(set(sampled_actions))
+
+                # def sample_action_reward(action):
+                #     main_prompt = MyMainPrompt(
+                #         obs_history=self.obs_history,
+                #         states=self.states + new_states,
+                #         strategies=self.strategies + new_actions + [action],
+                #         # actions=actions,
+                #         actions=self.explanations,
+                #     )
+                #     fast_reward, think = self.action_reward(main_prompt)
+                #     return fast_reward, think
+                with mp_dummy.Pool(processes=len(sampled_actions)) as pool:
+                    arguments = [
+                        (
+                            self.obs_history,
+                            self.states + new_states,
+                            self.strategies + new_actions + [action],
+                            self.explanations,
+                            self.action_reward,
+                        )
+                        for action in sampled_actions
+                    ]
+                    sampled_action_rewards = pool.starmap(
+                        sample_action_reward, arguments
                     )
-                    fast_reward, think = self.action_reward(main_prompt)
+
+                # action_space = {action: (fast_reward, think) for action, (fast_reward, think) in}
+                for action, (fast_reward, think) in zip(
+                    sampled_actions, sampled_action_rewards
+                ):
                     logger.info(f'*Strategy Candidate*: {action}')
                     logger.info(f'*Fast Reward Reasoning*: {think}')
                     logger.info(f'*Fast Reward*: {fast_reward}')
@@ -655,6 +728,46 @@ If you accidentally enter any of these websites, go back and try other websites.
                     # child.action_dict = action_dict
                     # child.fast_reward_dict = fast_reward_dict
                     children.append(child)
+
+                # for i in range(n_actions):
+                #     main_prompt = MyMainPrompt(
+                #         obs_history=self.obs_history,
+                #         states=self.states + new_states,
+                #         strategies=self.strategies + new_actions,
+                #         # actions=actions,
+                #         actions=self.explanations,
+                #     )
+                #     strategy = self.policy(main_prompt)
+                #     # action, action_dict = self.policy(main_prompt)
+                #     action_space[strategy] = 1
+
+                # for action, _ in action_space.items():
+                #     # TODO (DONE): Figrue out how fast reward is computed
+                #     # fast_reward = 0
+                #     # print(self.states + new_states)
+                #     # print(self.actions + new_actions)
+                #     main_prompt = MyMainPrompt(
+                #         obs_history=self.obs_history,
+                #         states=self.states + new_states,
+                #         strategies=self.strategies + new_actions + [action],
+                #         # actions=actions,
+                #         actions=self.explanations,
+                #     )
+                #     fast_reward, think = self.action_reward(main_prompt)
+                #     logger.info(f'*Strategy Candidate*: {action}')
+                #     logger.info(f'*Fast Reward Reasoning*: {think}')
+                #     logger.info(f'*Fast Reward*: {fast_reward}')
+
+                #     self.full_output += f'*Strategy Candidate*: {action}\n'
+                #     self.full_output += f'*Fast Reward Reasoning*: {think}\n'
+                #     self.full_output += f'*Fast Reward*: {fast_reward}\n'
+
+                #     child = MCTSNode(
+                #         state=None, action=action, parent=node, fast_reward=fast_reward
+                #     )
+                #     # child.action_dict = action_dict
+                #     # child.fast_reward_dict = fast_reward_dict
+                #     children.append(child)
                 node.children = children
 
         w_exp = 1

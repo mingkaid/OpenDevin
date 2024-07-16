@@ -202,8 +202,8 @@ def select_log_dir(log_dir_selection):
     )
 
 
-def refresh_log_selection():
-    log_list = list(reversed(sorted(glob('./frontend_logs/*.json'))))
+def refresh_log_selection(log_dir_selection):
+    log_list = list(reversed(sorted(glob(f'./{log_dir_selection}/*.json'))))
     return gr.Dropdown(
         log_list,
         value=None,
@@ -214,7 +214,7 @@ def refresh_log_selection():
 
 
 if __name__ == '__main__':
-    log_list = list(reversed(sorted(glob('./frontend_logs/*.json'))))
+    # log_list = list(reversed(sorted(glob('./frontend_logs/*.json'))))
 
     with gr.Blocks() as demo:
         title = gr.Markdown('# FastAgent Log Visualizer')
@@ -222,6 +222,9 @@ if __name__ == '__main__':
             with gr.Column(scale=1):
                 with gr.Group():
                     log_dir_options = ['frontend_logs', 'my_evaluator_logs']
+                    log_list = list(
+                        reversed(sorted(glob(f'./{log_dir_options[0]}/*.json')))
+                    )
                     log_dir_selection = gr.Dropdown(
                         log_dir_options, value=log_dir_options[0], label='Log Directory'
                     )
@@ -266,7 +269,7 @@ if __name__ == '__main__':
         log_selection.select(
             load_history, log_selection, [chatbot] + tabs + urls + screenshots + plots
         )
-        refresh.click(refresh_log_selection, None, log_selection)
+        refresh.click(refresh_log_selection, log_dir_selection, log_selection)
 
     demo.queue()
     demo.launch(share=False)
