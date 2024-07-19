@@ -168,8 +168,11 @@ class OpenDevinSession:
             and ('thought' in message['args'])
             and (message['args']['thought'].find('MCTS') != -1)
         ):
-            log_content = message['args']['thought']
-            self.figure = parse_and_visualize(log_content)
+            # log_content = message['args']['thought']
+            # self.figure = parse_and_visualize(log_content)
+
+            planning_record = json.loads(message['args']['thought'])
+            self.figure = parse_and_visualize(planning_record['full_output'])
 
     def _reset(self, agent_state=None):
         self.token, self.status = None, None

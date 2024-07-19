@@ -1,5 +1,6 @@
 import ast
 import itertools
+import json
 import math
 
 # import multiprocessing
@@ -79,8 +80,8 @@ def sample_action_reward(obs_history, states, strategies, actions, action_reward
         # actions=actions,
         actions=actions,
     )
-    fast_reward, think = action_reward(main_prompt)
-    return fast_reward, think
+    fast_reward, think, response = action_reward(main_prompt)
+    return fast_reward, think, response
 
 
 class WorldModelAgent(Agent):
@@ -309,7 +310,8 @@ You should not attempt to visit the following domains as they will block your en
 - Expedia: www.expedia.com
 - TripAdvisor: www.tripadvisor.com
 - TicketMaster: www.ticketmaster.com
-If you accidentally enter any of these websites, go back and try other websites.
+- Indeed: www.indeed.com
+If you accidentally enter any of these websites, go back or revisit Google to try other websites.
 """
         scrolling_prompt = """
 scroll(delta_x: float, delta_y: float)
@@ -319,6 +321,20 @@ scroll(delta_x: float, delta_y: float)
         scroll(-50.2, -100.5)
 """
         system_msg = system_msg.replace(scrolling_prompt, '')
+
+        focus_prompt = """
+focus(bid: str)
+    Examples:
+        focus('b455')
+"""
+        system_msg = system_msg.replace(focus_prompt, '')
+
+        hover_prompt = """
+hover(bid: str)
+    Examples:
+        hover('b8')
+"""
+        system_msg = system_msg.replace(hover_prompt, '')
         # print(system_msg)
         messages = []
         messages.append({'role': 'system', 'content': system_msg})
@@ -402,7 +418,7 @@ scroll(delta_x: float, delta_y: float)
             if response == 'towards-the-goal'
             else 0
         )
-        return reward, think
+        return reward, think, response
 
     def effectuator(self, main_prompt):
         prompt = main_prompt.get_effectuator_prompt()
@@ -530,10 +546,15 @@ scroll(delta_x: float, delta_y: float)
 
         state, status, replan, think = self.encoder(main_prompt)
         self.full_output = ''
+        self.full_output_dict = {}
 
         logger.info(f'*State*: {state}')
         logger.info(f'*Replan Reasoning*: {think}')
         logger.info(f'*Replan Status*: {status}')
+
+        self.full_output_dict['state'] = state
+        self.full_output_dict['replan_reasoning'] = think
+        self.full_output_dict['replan_status'] = status
 
         self.full_output += f'*State*: {state}\n'
         self.full_output += f'*Replan Reasoning*: {think}\n'
@@ -543,7 +564,10 @@ scroll(delta_x: float, delta_y: float)
         if len(actions) > 1 and actions[-1] == actions[-2]:
             logger.info('*Action Repeat, Force Replan*')
             replan = True
-        if replan or self.active_strategy is None or self.active_strategy_turns >= 3:
+        elif self.active_strategy is None or self.active_strategy_turns >= 3:
+            replan = True
+
+        if replan:
             strategy = self.planning_search(state)
             self.strategies.append(strategy)
             self.active_strategy = strategy
@@ -553,6 +577,9 @@ scroll(delta_x: float, delta_y: float)
             self.active_strategy_turns += 1
         logger.info(f'*Active Strategy*: {self.active_strategy}')
         self.full_output += f'*Active Strategy*: {self.active_strategy}\n'
+
+        self.full_output_dict['replan'] = replan
+        self.full_output_dict['active_strategy'] = self.active_strategy
 
         self.states.append(state)
         main_prompt = MyMainPrompt(
@@ -566,15 +593,27 @@ scroll(delta_x: float, delta_y: float)
         )
 
         action, explanation = self.effectuator(main_prompt)
+        if (
+            len(actions) >= 4
+            and actions[-1] == actions[-2] == actions[-3] == actions[-4]
+        ):
+            action = "send_msg_to_user('It seems I am stuck. Could you help me out?')"
+
         logger.info(f'*Action*: {action}')
         # self.full_output += f'*Action*: {action}\n'
         self.full_output += f'*Action*: {explanation}\n'
+        self.full_output_dict['explanation'] = explanation
+        self.full_output_dict['action'] = action
 
         llm_output_logger.info(self.full_output)
+        self.full_output_dict['full_output'] = self.full_output
+
+        self.full_output_json = json.dumps(self.full_output_dict)
 
         self.actions.append(action)
         self.explanations.append(explanation)
-        return self.parse_response(action, self.full_output)
+        # return self.parse_response(action, self.full_output)
+        return self.parse_response(action, self.full_output_json)
 
     def planning_search(self, state):
         # Run MCTS Search
@@ -588,14 +627,19 @@ scroll(delta_x: float, delta_y: float)
             def __init__(
                 self,
                 state=None,
+                status=None,
                 action=None,
-                parent=None,
+                reward_think=None,
+                reward_answer=None,
                 fast_reward=0,
+                parent=None,
                 is_terminal=False,
             ):
                 self.state = state
-                self.strategy = None
+                self.status = status
                 self.action = action
+                self.reward_think = reward_think
+                self.reward_answer = reward_answer
                 self.fast_reward = self.reward = fast_reward
                 self.cum_rewards = []
                 self.parent = parent
@@ -628,16 +672,14 @@ scroll(delta_x: float, delta_y: float)
                     # actions=actions,
                     actions=self.explanations,
                 )
-                node.state, node.state_status, node.is_terminal = self.dynamics(
-                    main_prompt
-                )
+                node.state, node.status, node.is_terminal = self.dynamics(main_prompt)
                 logger.info(f'*Expanded Strategy*: {node.action}')
                 logger.info(f'*Next State*: {node.state}')
-                logger.info(f'*Status*: {node.state_status}')
+                logger.info(f'*Status*: {node.status}')
 
                 self.full_output += f'*Expanded Strategy*: {node.action}\n'
                 self.full_output += f'*Next State*: {node.state}\n'
-                self.full_output += f'*Status*: {node.state_status}\n'
+                self.full_output += f'*Status*: {node.status}\n'
 
                 new_states.append(node.state)
 
@@ -653,7 +695,7 @@ scroll(delta_x: float, delta_y: float)
                 # )
                 # node.reward, node.is_terminal, node.reward_details = self.critic(main_prompt)
                 # TODO (DONE) : Figure out numerical reward logic
-            if not node.is_terminal:
+            if not node.is_terminal and not _is_terminal_with_depth_limit(node):
                 children = []
                 # Sample an action space:
                 # action_space = {}
@@ -685,16 +727,6 @@ scroll(delta_x: float, delta_y: float)
 
                 sampled_actions = list(set(sampled_actions))
 
-                # def sample_action_reward(action):
-                #     main_prompt = MyMainPrompt(
-                #         obs_history=self.obs_history,
-                #         states=self.states + new_states,
-                #         strategies=self.strategies + new_actions + [action],
-                #         # actions=actions,
-                #         actions=self.explanations,
-                #     )
-                #     fast_reward, think = self.action_reward(main_prompt)
-                #     return fast_reward, think
                 with mp_dummy.Pool(processes=len(sampled_actions)) as pool:
                     arguments = [
                         (
@@ -711,7 +743,7 @@ scroll(delta_x: float, delta_y: float)
                     )
 
                 # action_space = {action: (fast_reward, think) for action, (fast_reward, think) in}
-                for action, (fast_reward, think) in zip(
+                for action, (fast_reward, think, response) in zip(
                     sampled_actions, sampled_action_rewards
                 ):
                     logger.info(f'*Strategy Candidate*: {action}')
@@ -722,52 +754,22 @@ scroll(delta_x: float, delta_y: float)
                     self.full_output += f'*Fast Reward Reasoning*: {think}\n'
                     self.full_output += f'*Fast Reward*: {fast_reward}\n'
 
+                    # child = MCTSNode(
+                    #     state=None, action=action, parent=node, fast_reward=fast_reward
+                    # )
                     child = MCTSNode(
-                        state=None, action=action, parent=node, fast_reward=fast_reward
+                        state=None,
+                        status=None,
+                        action=action,
+                        reward_think=think,
+                        reward_answer=response,
+                        fast_reward=fast_reward,
+                        parent=node,
                     )
                     # child.action_dict = action_dict
                     # child.fast_reward_dict = fast_reward_dict
                     children.append(child)
 
-                # for i in range(n_actions):
-                #     main_prompt = MyMainPrompt(
-                #         obs_history=self.obs_history,
-                #         states=self.states + new_states,
-                #         strategies=self.strategies + new_actions,
-                #         # actions=actions,
-                #         actions=self.explanations,
-                #     )
-                #     strategy = self.policy(main_prompt)
-                #     # action, action_dict = self.policy(main_prompt)
-                #     action_space[strategy] = 1
-
-                # for action, _ in action_space.items():
-                #     # TODO (DONE): Figrue out how fast reward is computed
-                #     # fast_reward = 0
-                #     # print(self.states + new_states)
-                #     # print(self.actions + new_actions)
-                #     main_prompt = MyMainPrompt(
-                #         obs_history=self.obs_history,
-                #         states=self.states + new_states,
-                #         strategies=self.strategies + new_actions + [action],
-                #         # actions=actions,
-                #         actions=self.explanations,
-                #     )
-                #     fast_reward, think = self.action_reward(main_prompt)
-                #     logger.info(f'*Strategy Candidate*: {action}')
-                #     logger.info(f'*Fast Reward Reasoning*: {think}')
-                #     logger.info(f'*Fast Reward*: {fast_reward}')
-
-                #     self.full_output += f'*Strategy Candidate*: {action}\n'
-                #     self.full_output += f'*Fast Reward Reasoning*: {think}\n'
-                #     self.full_output += f'*Fast Reward*: {fast_reward}\n'
-
-                #     child = MCTSNode(
-                #         state=None, action=action, parent=node, fast_reward=fast_reward
-                #     )
-                #     # child.action_dict = action_dict
-                #     # child.fast_reward_dict = fast_reward_dict
-                #     children.append(child)
                 node.children = children
 
         w_exp = 1
@@ -790,7 +792,7 @@ scroll(delta_x: float, delta_y: float)
         # )
 
         N = 3
-        root = MCTSNode(state=state, action=None, parent=None)
+        root = MCTSNode(state=state, action=None, parent=None, status='init')
         # for n in trange(N, desc='MCTS iteration', leave=True):
         for n in range(N):
             logger.info(f'MCTS iter {n}')
@@ -855,6 +857,32 @@ scroll(delta_x: float, delta_y: float)
         action = output_iter[1].action
         logger.info(f'*Selected Strategy*: {action}')
         self.full_output += f'*Selected Strategy*: {action}\n'
+
+        # def __init__(
+        #         self,
+        #         state=None,
+        #         status=None,
+        #         action=None,
+        #         reward_think=None,
+        #         reward_answer=None,
+        #         fast_reward=0,
+        #         parent=None,
+        #         is_terminal=False,
+
+        # Iterate through the tree to build the full_output_dict
+        def node_to_dict(node):
+            return {
+                'state': node.state,
+                'status': node.status,
+                'strategy': node.action,
+                'critique': node.reward_think,
+                'evaluation': node.reward_answer,
+                'reward': node.reward,
+                'q_value': node.Q,
+                'children': [node_to_dict(child) for child in node.children],
+            }
+
+        self.full_output_dict['mcts_tree'] = node_to_dict(root)
 
         # print('Selected Action:', action)
 

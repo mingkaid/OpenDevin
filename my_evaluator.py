@@ -36,18 +36,18 @@ questions = [
     'Find me 3 good options for laptops under $1,000 that have at least 16GB RAM and a dedicated GPU.',
     'I live at 4463 Oak Grove Dr, La Cañada Flintridge, CA 91011, can you find 3 Mediterranean restaurants close by that have ratings above 4.0 stars and a large number of ratings?',
     'I have $500 to spend on a weekend getaway. Can you suggest three destinations near san diego with accommodation and activities within this budget?',
-    'I want to buy a black mattress. Can you look at 3 e-commerce platforms and give me one good option from each?'
+    'I want to buy a black mattress. Can you look at 3 e-commerce platforms and give me one good option from each?',
     'Can you go on amazon and help me put a gaming computer of any kind into my shopping cart?',
     'Help me find a table at fogo de chão in San Jose for 2 people using google.',
     'Using google, can you purchase a one-way flight from Los Angeles to Tokyo this Sunday?',
     'Help me reserve a hotel room in New York City for three nights starting next Friday using Google.',
-    'Using Google, can you purchase tickets to the next Taylor Swift concert close to me?',
+    'Using Google, can you purchase tickets to the next Taylor Swift concert close to me? My zipcode is 92093',
 ]
 
 
 def run_question(args, qid, start_datetime):
-    if qid < 10:
-        return
+    # if qid < 4:
+    #     return
 
     random.seed(qid)
     question = questions[qid]

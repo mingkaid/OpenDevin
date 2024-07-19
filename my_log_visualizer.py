@@ -125,7 +125,10 @@ class TestSession:
             and (message['args']['thought'].find('MCTS') != -1)
         ):
             # print('Update figure')
-            log_content = message['args']['thought']
+            if message['args']['thought'].startswith('{'):
+                log_content = json.loads(message['args']['thought'])['full_output']
+            else:
+                log_content = message['args']['thought']
             # print(log_content)
             self.figure = parse_and_visualize(log_content)
             # figure.show()
@@ -134,7 +137,12 @@ class TestSession:
             and 'thought' in message['args']
             and 'State' in message['args']['thought']
         ):
-            self.figure = parse_and_visualize_onestep(message['args']['thought'])
+            if message['args']['thought'].startswith('{'):
+                log_content = json.loads(message['args']['thought'])['full_output']
+            else:
+                log_content = message['args']['thought']
+            # self.figure = parse_and_visualize_onestep(message['args']['thought'])
+            self.figure = parse_and_visualize_onestep(log_content)
 
 
 def load_history(log_selection):
