@@ -85,6 +85,7 @@ class TestSession:
         self.action_messages = []
         self.browser_history = []
         self.figures = []
+        self.webpages = []
 
     def _read_message(self, message, verbose=True):
         printable = {}
@@ -100,6 +101,9 @@ class TestSession:
             if message['action'] == 'browse_interactive':
                 self._update_figure(message)
                 self.figures.append(self.figure)
+
+                webpage = self._load_webpage(message)
+                self.webpages.append(webpage)
             printable = message
         elif 'extras' in message and 'screenshot' in message['extras']:
             image_data = base64.b64decode(message['extras']['screenshot'])
@@ -144,6 +148,18 @@ class TestSession:
             # self.figure = parse_and_visualize_onestep(message['args']['thought'])
             self.figure = parse_and_visualize_onestep(log_content)
 
+    def _load_webpage(self, message):
+        webpage = ''
+        if (
+            ('args' in message)
+            and ('thought' in message['args'])
+            and message['args']['thought'].startswith('{')
+        ):
+            planning_record = json.loads(message['args']['thought'])
+            if 'obs' in planning_record:
+                webpage = planning_record['obs']['axtree_txt']
+        return webpage
+
 
 def load_history(log_selection):
     messages = json.load(open(log_selection, 'r'))
@@ -156,27 +172,39 @@ def load_history(log_selection):
     tabs = []
     start_url = 'about:blank'
     blank = Image.new('RGB', (1280, 720), (255, 255, 255))
+    placeholder = '<placeholder>'
 
     # print(self.browser_history)
     tabs = []
     urls = []
     screenshots = []
+    sub_tabs = []
     plots = []
+    webpages = []
 
     browser_history = [(blank, start_url)] + self.browser_history
     print(len(browser_history))
     for i in range(len(self.figures)):
         img, txt = browser_history[min(i, len(browser_history) - 1)]
         figure = self.figures[i]
+        webpage = self.webpages[i]
         with gr.Tab(f'Step {i+1}', visible=True) as tab:
             with gr.Group():
                 url = gr.Textbox(txt, label='URL', interactive=False, max_lines=1)
                 screenshot = gr.Image(img, interactive=False, label='Webpage')
-                plot = gr.Plot(figure, label='Agent Reasoning Process')
+                with gr.Tab('Plot') as plot_tab:
+                    plot = gr.Plot(figure, label='Agent Reasoning Process')
+                    sub_tabs.append(plot_tab)
+                with gr.Tab('Webpage') as obs_tab:
+                    webpage = gr.Textbox(
+                        webpage, interactive=False, lines=20, max_lines=30
+                    )
+                    sub_tabs.append(obs_tab)
 
                 urls.append(url)
                 screenshots.append(screenshot)
                 plots.append(plot)
+                webpages.append(webpage)
 
             tabs.append(tab)
         if len(tabs) > max_tabs:
@@ -187,16 +215,24 @@ def load_history(log_selection):
             with gr.Group():
                 url = gr.Textbox(start_url, label='URL', interactive=False, max_lines=1)
                 screenshot = gr.Image(blank, interactive=False, label='Webpage')
-                plot = gr.Plot(go.Figure(), label='Agent Reasoning Process')
+                with gr.Tab('Plot') as plot_tab:
+                    plot = gr.Plot(go.Figure(), label='Agent Reasoning Process')
+                    sub_tabs.append(plot_tab)
+                with gr.Tab('Webpage') as obs_tab:
+                    webpage = gr.Textbox(
+                        placeholder, interactive=False, lines=20, max_lines=30
+                    )
+                    sub_tabs.append(obs_tab)
 
                 urls.append(url)
                 screenshots.append(screenshot)
                 plots.append(plot)
+                webpages.append(webpage)
 
             tabs.append(tab)
 
     # print(len(tabs))
-    return [chat_history] + tabs + urls + screenshots + plots
+    return [chat_history] + tabs + urls + screenshots + sub_tabs + plots + webpages
 
 
 def select_log_dir(log_dir_selection):
@@ -249,12 +285,15 @@ if __name__ == '__main__':
             with gr.Column(scale=2):
                 start_url = 'about:blank'
                 blank = Image.new('RGB', (1280, 720), (255, 255, 255))
+                placeholder = '<placeholder>'
 
                 max_tabs = 30
                 tabs = []
                 urls = []
                 screenshots = []
+                sub_tabs = []
                 plots = []
+                webpages = []
                 while len(tabs) < max_tabs:
                     with gr.Tab(f'Step {len(tabs)+1}', visible=(len(tabs) == 0)) as tab:
                         with gr.Group():
@@ -264,18 +303,33 @@ if __name__ == '__main__':
                             screenshot = gr.Image(
                                 blank, interactive=False, label='Webpage'
                             )
-                            plot = gr.Plot(go.Figure(), label='Agent Reasoning Process')
+                            with gr.Tab('Plot') as plot_tab:
+                                plot = gr.Plot(
+                                    go.Figure(), label='Agent Reasoning Process'
+                                )
+                                sub_tabs.append(plot_tab)
+                            with gr.Tab('Webpage') as obs_tab:
+                                webpage = gr.Textbox(
+                                    placeholder,
+                                    interactive=False,
+                                    lines=20,
+                                    max_lines=30,
+                                )
+                                sub_tabs.append(obs_tab)
 
                             urls.append(url)
                             screenshots.append(screenshot)
                             plots.append(plot)
+                            webpages.append(webpage)
 
                         tabs.append(tab)
                 # print(len(tabs))
 
         log_dir_selection.select(select_log_dir, log_dir_selection, log_selection)
         log_selection.select(
-            load_history, log_selection, [chatbot] + tabs + urls + screenshots + plots
+            load_history,
+            log_selection,
+            [chatbot] + tabs + urls + screenshots + sub_tabs + plots + webpages,
         )
         refresh.click(refresh_log_selection, log_dir_selection, log_selection)
 

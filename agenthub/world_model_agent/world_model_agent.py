@@ -186,6 +186,8 @@ class WorldModelAgent(Agent):
         self.evaluations: List[str] = []
         self.strategies: List[Optional[str]] = []
         self.active_strategy: Optional[str] = None
+        self.full_output: str = ''
+        self.full_output_dict: Dict[str, Any] = {}
         self.active_strategy_turns: int = 0
 
     def parse_response(self, response: str, thought: str) -> Action:
@@ -552,6 +554,7 @@ hover(bid: str)
         logger.info(f'*Replan Reasoning*: {think}')
         logger.info(f'*Replan Status*: {status}')
 
+        self.full_output_dict['obs'] = current_obs
         self.full_output_dict['state'] = state
         self.full_output_dict['replan_reasoning'] = think
         self.full_output_dict['replan_status'] = status
