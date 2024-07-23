@@ -1,5 +1,5 @@
 {
-    "meta-llama/Meta-Llama-3-70B-Instruct":
+    "meta-llama/Meta-Llama-3.1-70B-Instruct":
     {
         "provider": "openai",
         "port": 8000
