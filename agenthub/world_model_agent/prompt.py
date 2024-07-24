@@ -9,54 +9,6 @@ from .utils import (
     parse_html_tags_raise,
 )
 
-# @dataclass
-# class Flags:
-#     use_html: bool = True
-#     use_ax_tree: bool = False
-#     drop_ax_tree_first: bool = True  # This flag is no longer active TODO delete
-#     use_thinking: bool = False
-#     use_error_logs: bool = False
-#     use_past_error_logs: bool = False
-#     use_history: bool = False
-#     use_action_history: bool = False
-#     use_memory: bool = False
-#     use_diff: bool = False
-#     html_type: str = 'pruned_html'
-#     use_concrete_example: bool = True
-#     use_abstract_example: bool = False
-#     multi_actions: bool = False
-#     action_space: Literal[
-#         'python', 'bid', 'coord', 'bid+coord', 'bid+nav', 'coord+nav', 'bid+coord+nav'
-#     ] = 'bid'
-#     is_strict: bool = False
-#     # This flag will be automatically disabled `if not chat_model_args.has_vision()`
-#     use_screenshot: bool = True
-#     enable_chat: bool = False
-#     max_prompt_tokens: int = None
-#     extract_visible_tag: bool = False
-#     extract_coords: Literal['False', 'center', 'box'] = 'False'
-#     extract_visible_elements_only: bool = False
-#     demo_mode: Literal['off', 'default', 'only_visible_elements'] = 'off'
-
-#     def copy(self):
-#         return deepcopy(self)
-
-#     def asdict(self):
-#         """Helper for JSON serializble requirement."""
-#         return asdict(self)
-
-#     @classmethod
-#     def from_dict(self, flags_dict):
-#         """Helper for JSON serializble requirement."""
-#         if isinstance(flags_dict, Flags):
-#             return flags_dict
-
-#         if not isinstance(flags_dict, dict):
-#             raise ValueError(
-#                 f'Unregcognized type for flags_dict of type {type(flags_dict)}.'
-#             )
-#         return Flags(**flags_dict)
-
 
 class PromptElement:
     """Base class for all prompt elements. Prompt elements can be hidden.
@@ -164,96 +116,6 @@ class Trunkater(Shrinkable):
         self.shrink_calls += 1
 
 
-# def fit_tokens(
-#     shrinkable: Shrinkable,
-#     max_prompt_tokens=None,
-#     max_iterations=20,
-#     model_name='openai/gpt-4',
-# ):
-#     """Shrink a prompt element until it fits max_tokens.
-
-#     Parameters
-#     ----------
-#     shrinkable : Shrinkable
-#         The prompt element to shrink.
-#     max_tokens : int
-#         The maximum number of tokens allowed.
-#     max_iterations : int, optional
-#         The maximum number of shrink iterations, by default 20.
-#     model_name : str, optional
-#         The name of the model used when tokenizing.
-
-#     Returns
-#     -------
-#     str : the prompt after shrinking.
-#     """
-
-#     if max_prompt_tokens is None:
-#         return shrinkable.prompt
-
-#     for _ in range(max_iterations):
-#         prompt = shrinkable.prompt
-#         if isinstance(prompt, str):
-#             prompt_str = prompt
-#         elif isinstance(prompt, list):
-#             prompt_str = '\n'.join([p['text'] for p in prompt if p['type'] == 'text'])
-#         else:
-#             raise ValueError(f'Unrecognized type for prompt: {type(prompt)}')
-#         n_token = count_tokens(prompt_str, model=model_name)
-#         if n_token <= max_prompt_tokens:
-#             return prompt
-#         shrinkable.shrink()
-
-#     logging.info(
-#         dedent(
-#             f"""\
-#             After {max_iterations} shrink iterations, the prompt is still
-#             {count_tokens(prompt_str)} tokens (greater than {max_prompt_tokens}). Returning the prompt as is."""
-#         )
-#     )
-#     return prompt
-
-
-# def _get_action_space(flags: Flags) -> AbstractActionSet:
-#     match flags.action_space:
-#         case 'python':
-#             action_space = PythonActionSet(strict=flags.is_strict)
-#             if flags.multi_actions:
-#                 warn(
-#                     f'Flag action_space={repr(flags.action_space)} incompatible with multi_actions={repr(flags.multi_actions)}.'
-#                 )
-#             if flags.demo_mode != 'off':
-#                 warn(
-#                     f'Flag action_space={repr(flags.action_space)} incompatible with demo_mode={repr(flags.demo_mode)}.'
-#                 )
-#             return action_space
-#         case 'bid':
-#             action_subsets = ['chat', 'bid']
-#         case 'coord':
-#             action_subsets = ['chat', 'coord']
-#         case 'bid+coord':
-#             action_subsets = ['chat', 'bid', 'coord']
-#         case 'bid+nav':
-#             action_subsets = ['chat', 'bid', 'nav']
-#         case 'coord+nav':
-#             action_subsets = ['chat', 'coord', 'nav']
-#         case 'bid+coord+nav':
-#             action_subsets = ['chat', 'bid', 'coord', 'nav']
-#         case _:
-#             raise NotImplementedError(
-#                 f'Unknown action_space {repr(flags.action_space)}'
-#             )
-
-#     action_space = HighLevelActionSet(
-#         subsets=action_subsets,
-#         multiaction=flags.multi_actions,
-#         strict=flags.is_strict,
-#         demo_mode=flags.demo_mode,
-#     )
-
-#     return action_space
-
-
 class HTML(Trunkater):
     def __init__(self, html, visible: bool = True, prefix='') -> None:
         super().__init__(visible=visible, start_trunkate_iteration=5)
@@ -282,49 +144,6 @@ class Error(PromptElement):
     def __init__(self, error, visible: bool = True, prefix='') -> None:
         super().__init__(visible=visible)
         self._prompt = f'\n{prefix}Error from previous action:\n{error}\n'
-
-
-# class Observation(Shrinkable):
-#     """Observation of the current step.
-
-#     Contains the html, the accessibility tree and the error logs.
-#     """
-
-#     def __init__(self, obs, flags: Flags) -> None:
-#         super().__init__()
-#         self.flags = flags
-#         self.obs = obs
-#         self.html = HTML(
-#             obs[flags.html_type], visible=lambda: flags.use_html, prefix='## '
-#         )
-#         self.ax_tree = AXTree(
-#             obs['axtree_txt'],
-#             visible=lambda: flags.use_ax_tree,
-#             coord_type=flags.extract_coords,
-#             prefix='## ',
-#         )
-#         self.error = Error(
-#             obs['last_action_error'],
-#             visible=lambda: flags.use_error_logs and obs['last_action_error'],
-#             prefix='## ',
-#         )
-
-#     def shrink(self):
-#         self.ax_tree.shrink()
-#         self.html.shrink()
-
-#     @property
-#     def _prompt(self) -> str:
-#         return f'\n# Observation of current step:\n{self.html.prompt}{self.ax_tree.prompt}{self.error.prompt}\n\n'
-
-#     def add_screenshot(self, prompt):
-#         if self.flags.use_screenshot:
-#             if isinstance(prompt, str):
-#                 prompt = [{'type': 'text', 'text': prompt}]
-#             img_url = BrowserEnv.image_to_jpg_base64_url(self.obs['screenshot'])
-#             prompt.append({'type': 'image_url', 'image_url': img_url})
-
-#         return prompt
 
 
 class MacNote(PromptElement):
@@ -458,6 +277,10 @@ class MyMainPrompt(PromptElement):
         if len(obs_history) == len(states) + 1 and len(states) == len(strategies):
             # encoding, use just the obs
             self.obs = self.get_obs(obs_history[-1])
+            window = 3
+            self.history = self.get_history(
+                obs_history, states[-window:], strategies[-window:], actions[-window:]
+            )
         elif (
             len(obs_history) == len(states)
             and len(states) == len(strategies) + 1
@@ -609,11 +432,11 @@ class MyMainPrompt(PromptElement):
 
 Here is an abstract version of the answer with description of the content of each tag. Make sure you follow this structure, but replace the content with your answer:
 <explanation>
-Describe what the action to be taken is trying to do using a single concise sentence. Try to break down the active strategy into individual, manageable actions. Focus on the single action. Use first person perspective like "I am doing something". If you got trouble with using the search button, try hitting enter on the search box instead.
+Describe what the action to be taken is trying to do using a single concise sentence. Break down the active strategy into individual, manageable actions. Avoid long, complex search terms. Focus on the single action. Use first-person perspective like "I am doing something." If you encounter trouble using the search button, try hitting enter on the search box instead. If you have trouble clicking on something, try scrolling down by 500 pixels first. Use clear and simple language to detail each step.
 </explanation>
 
 <action>
-Based on the current observation, state, active strategy, and action history, select one single action to be executed. You can only use one action at a time. Your response will be executed with Python as a function call so make sure to follow the format and argument data type specifications as the functions in the action space.
+Based on the current observation, state, active strategy, and action history, select one single action to be executed. Use only one action at a time. You must not enclose bid inputs in [brackets]. Your response will be executed as a Python function call, so ensure it adheres to the format and argument data type specifications defined in the action space.
 </action>
 """
 
@@ -648,18 +471,16 @@ fill('32-12', 'example with "quotes"')
 
 Here is an abstract version of the answer with description of the content of each tag. Make sure you follow this structure, but replace the content with your answer:
 <state>
-Summarize the observation of the current step and last error you encountered. Include details such as accessibility tree id when describing elements on the page. Describe the effect that your previous action had, as well as elements you can interact with. Infer any information relevant to achieving your goal. No need to describe what you plan to do, just focus on giving an objective description.
+Summarize the current state of the webpage, focusing on the most recent action you took and any errors encountered. Note any dialogs, progress indicators, or significant changes such as items in your cart or sites visited. Describe the impact of your previous action on the webpage, including any new interactive elements. Include any inferred information that may help achieve the goal. Report any error messages displayed. Do not include your next planned actions; focus solely on providing an objective summary.
 </state>\
 
 <progress>
-Observe your previous action, current state, and active strategy. Classify the situation into one of four categories based on the progress of your strategy. The categories are:
-
-1. "finished" - Your strategy has been successfully executed and you will plan for the next step.
-2. "in-progress" - Your strategy is still ongoing and you need to take some more actions.
-3. "not-sure" - It's unclear if your strategy has been carried out and you need to reassess your plan.
-4. "failed" - Your strategy was not successful and you need to replan.
-
-You should be extra careful when assigning "in-progress" labels. If you are unsure, please select "not-sure" instead.
+Evaluate your most recent action, the current state of the task, and your active strategy. Categorize the situation into one of four categories based on the progress of your strategy:
+1. "finished" - Your strategy has been successfully executed, and you will plan the next step.
+2. "in-progress" - Your strategy is still ongoing, and further actions are required.
+3. "not-sure" - It's unclear whether your strategy has been executed successfully, and you need to reassess your plan.
+4. "failed" - Your strategy was unsuccessful, and you need to develop a new plan.
+Be cautious when assigning the "in-progress" label. If uncertain, choose "not-sure" instead.
 </progress>
 """
 
@@ -668,15 +489,23 @@ You should be extra careful when assigning "in-progress" labels. If you are unsu
 
 Here is a concrete example of how to format your answer. Make sure to follow the template by wrapping with proper html starting and closing tags:
 <state>
-The previous action yielded a timeout error, suggesting it had no effect on the page. The page shows:
-- An empty textbox with id 123, which can be clicked or filled. Text "Date" is on top, suggesting the textbox may be for entering dates.
-- A button with id 456 and text "Submit" below textbox 123, suggesting that when clicked, it will submit the textbox's content to the website backend.
+The previous action resulted in a timeout error, indicating no changes were made to the page. Thus far, I have visited ABC.com and DEF.com, discovering information G and H, respectively. The current page contains a dialog with id 789 prompting whether to add protection, offering coverage options and the choices "Add Protection" or "No Thanks". A link with id 234 indicates "1 item in cart", revealing a cellphone in the cart with a subtotal of $345. I searched for a 5-night hotel stay, but results only showed availability for a 6-night stay, suggesting a 5-night stay is unavailable. The page displays:
+- An empty textbox with id 123 labeled "Date", indicating it is likely for date input.
+- A button with id 456 labeled "Submit" positioned below textbox 123, suggesting it submits the date entered in the textbox.
+Additionally, there are:
+- A notification with id 101 displaying "Error: Invalid date format" when attempting to submit the date.
+- A dropdown menu with id 102 labeled "Room Type" containing options "Single", "Double", and "Suite".
+- A section with id 103 showing "Total Price: $0.00", implying the total cost updates dynamically based on selections.
+The page did not display any new errors after the latest action, apart from the timeout issue.
+I clicked the "Submit" button on the booking form, but no confirmation message appeared, and the page did not change. There is no indication whether the submission was successful or not. I need to reassess the page for any subtle changes or possible errors.
 </state>\
 
 <progress>
 not-sure
 </progress>
 """
+
+        # foo = 'Include details such as accessibility tree id when describing elements on the page.'
 
         # prompt = self.add_screenshot(prompt)
 
@@ -693,7 +522,7 @@ not-sure
 
 Here is an abstract version of the answer with description of the content of each tag. Make sure you follow this structure, but replace the content with your answer:
 <strategy>
-Assume the previous actions have been carried out and the environment has transitioned to the current inferred state. Describe your next action to achieve the goal. Avoid starting phrases like "To accomplish the goal", "I will", "To proceed", or "Assume the previous strategies have been carried out". Do not mention specific element ids as they may change during the execution. Limit your answer to one sentence. Include any details that make it easier for someone else to select the right action. Be creative, and try to come up with many different ways to reach the goal.
+Given that previous actions have been completed and the environment has transitioned to the current inferred state, describe the next action to achieve the goal. Break down the goal into clear, manageable steps. Avoid using phrases such as "To accomplish the goal," "I will," "To proceed," or "Assume the previous strategies have been carried out." Refrain from mentioning specific element IDs as they may change during execution. Limit your response to one sentence and include any details that help select the correct action. Be creative and propose novel methods to achieve the goal. Avoid creating accounts without user permission or providing personal information.
 </strategy>
 """
 
@@ -702,7 +531,7 @@ Assume the previous actions have been carried out and the environment has transi
 
 Here is a concrete example of how to format your answer. Make sure to follow the template by wrapping with proper html starting and closing tags:
 <strategy>
-Explore different ways to fill the form, such as clicking its elements to explore options or filling parts of it with text.
+Click through the form fields to explore available options and ensure all mandatory fields are completed.
 </strategy>
 """
 
@@ -721,15 +550,15 @@ Explore different ways to fill the form, such as clicking its elements to explor
 Here is an abstract version of the answer with description of the content of each tag. Make sure you follow this structure, but replace the content with your
 answer:
 <next_state>
-Assume the environment is at the current inferred state and your proposed strategy has been applied. Predict the new state of the webpage after executing each part of the proposed strategy, such as page content you will observe and any possible information you will gain that is relevant to your goal. Pay attention to how the element details will change. Describe the elements you can interact with on the changed webpage.
+Assume the environment is at the current inferred state and your proposed strategy has been applied. Predict the new state of the webpage after executing each part of the proposed strategy. Describe the expected changes in page content, any new information relevant to your goal, and how interactive elements might change. Pay close attention to how the details of elements will be altered. Identify the new elements you can interact with on the updated webpage.
 </next_state>\
 
 <progress>
-Observe your previous and current states of the browser environment. Classify your status into one of three categories based on your progress towards the goal. The categories are:
+Evaluate the previous and current states of the browser environment. Classify your status into one of three categories based on your progress towards the goal:
 
-1. "in-progress" - You are still in progress to achieving the goal.
-2. "not-sure" - It's unclear if you have achieved the goal.
-3. "goal-reached" - You have successfully completed the goal.
+"in-progress" - You are still working towards achieving the goal.
+"not-sure" - It's unclear if the goal has been achieved.
+"goal-reached" - You have successfully completed the goal.
 </progress>
 """
 
@@ -738,12 +567,15 @@ Observe your previous and current states of the browser environment. Classify yo
 
 Here is a concrete example of how to format your answer. Make sure to follow the template by wrapping with proper html starting and closing tags:
 <next_state>
-A new list of text items have appeared below textbox 123, which may be autocomplete.
-
+A dropdown menu appears below the textbox, listing various predefined options based on the initial input.
+The textbox now contains the text "quote" and displays suggested completions as a dropdown list.
 The page shows:
-- A textbox with id 123 filled with text "quote", which can be clicked or filled again.
-- A list with id 456 under textbox 123. It contains items with ids 789 and 012, each of which can be clicked on. Item 789 has text "quote on" which matches what we want.
-- A button with id 345 and text "Submit" below textbox 123, suggesting that when clicked, it will submit the textbox's content to the website backend.
+- A textbox labeled "quote" filled with the text "quote on."
+- A dropdown list beneath the textbox containing items such as "quote on insurance," "quote on travel," and "quote on booking," each selectable.
+- A "Submit" button below the textbox, which can be clicked to submit the selected or typed input to the backend.
+- A notification area above the form indicating any immediate feedback or errors from previous actions, currently displaying "Please complete all required fields."
+- Additional form fields dynamically appearing based on previous selections, such as a date picker or additional textboxes for more specific information related to the chosen quote option.
+I have filled out most of the booking form but still need to select a room type before submission. The form fields are populated, but the "Submit" button remains inactive until all required fields are completed.
 </next_state>\
 
 <progress>

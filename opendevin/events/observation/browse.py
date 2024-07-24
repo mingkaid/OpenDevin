@@ -27,6 +27,7 @@ class BrowserOutputObservation(Observation):
     last_browser_action: str = ''
     last_browser_action_error: str = ''
     focused_element_bid: str = ''
+    scroll_position: dict = field(default_factory=dict, repr=False)
 
     @property
     def message(self) -> str:
@@ -36,6 +37,7 @@ class BrowserOutputObservation(Observation):
         return (
             '**BrowserOutputObservation**\n'
             f'URL: {self.url}\n'
+            f'Scroll Position: {self.scroll_position}\n'
             f'Status code: {self.status_code}\n'
             f'Error: {self.error}\n'
             f'Open pages: {self.open_pages_urls}\n'
@@ -43,5 +45,5 @@ class BrowserOutputObservation(Observation):
             f'Last browser action: {self.last_browser_action}\n'
             f'Last browser action error: {self.last_browser_action_error}\n'
             f'Focused element bid: {self.focused_element_bid}\n'
-            f'CONTENT: {self.content}\n'
+            f'CONTENT: {self.content[:1000]}\n'
         )

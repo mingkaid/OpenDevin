@@ -41,6 +41,7 @@ async def browse(action, browser: BrowserEnv | None) -> BrowserOutputObservation
             last_browser_action_error=obs[
                 'last_action_error'
             ],  # last browser env action error
+            scroll_position=obs['scroll_position'],
         )
     except Exception as e:
         return BrowserOutputObservation(

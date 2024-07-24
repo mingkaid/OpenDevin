@@ -108,6 +108,25 @@ class BrowserEnv:
                     action = action_data['action']
                     obs, reward, terminated, truncated, info = env.step(action)
 
+                    def get_scroll_position(page):
+                        return page.evaluate("""() => {
+                            const scrollTop = window.scrollY;
+                            const windowHeight = window.innerHeight;
+                            const documentHeight = document.documentElement.scrollHeight;
+                            const remainingPixels = documentHeight - (scrollTop + windowHeight);
+
+                            return {
+                                'scrollTop': scrollTop,
+                                'windowHeight': windowHeight,
+                                'documentHeight': documentHeight,
+                                'remainingPixels': remainingPixels
+                            };
+                        }""")
+
+                    scroll_position = get_scroll_position(env.page)
+                    logger.info(scroll_position)
+                    obs['scroll_position'] = scroll_position
+
                     # EVAL only: save the rewards into file for evaluation
                     if self.eval_mode:
                         rewards.append(reward)

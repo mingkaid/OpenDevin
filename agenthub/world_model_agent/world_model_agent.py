@@ -7,6 +7,8 @@ import math
 # import multiprocess as mp
 import multiprocessing.dummy as mp_dummy
 import os
+import random
+import time
 import traceback
 from typing import Any, Dict, List, Optional
 
@@ -34,6 +36,7 @@ from opendevin.runtime.plugins import (
 from opendevin.runtime.tools import RuntimeTool
 
 from .prompt import MyMainPrompt
+from .utils import ParseError
 
 USE_NAV = (
     os.environ.get('USE_NAV', 'true') == 'true'
@@ -47,7 +50,7 @@ if not USE_NAV and USE_CONCISE_ANSWER:
 else:
     EVAL_MODE = False
 
-MAX_TOKENS = 8192  # added
+MAX_TOKENS = 32768  # added
 OUTPUT_BUFFER = 1100  # added
 # DEFAULT_BROWSER = 'https://www.google.com'  # added
 DEFAULT_BROWSER = None
@@ -56,8 +59,8 @@ DEFAULT_BROWSER = None
 client = OpenAI()
 
 
-class ParseError(Exception):
-    pass
+# class ParseError(Exception):
+#     pass
 
 
 def sample_action(obs_history, states, strategies, actions, policy):
@@ -295,34 +298,50 @@ Review the current state of the page and all other information to find the best 
 # Goal:
 {self.goal}
 
-Stop and ask the user when their own information is required to proceed with the task, like name, phone, email, login credentials, and more. Do not stop if the information is what you need to search for.
-
-If the goal requires you to look for information online, try to visit multiple websites to look for more comprehensive information before responding.
+# Goal Tips
+- Stop and ask the user when their personal information (e.g., name, phone, email, login credentials) is required to proceed. Do not stop if the information is only needed for a search.
+- When searching for information online, visit multiple websites for comprehensive information before responding.
+- Avoid messaging the user with information during the exploration. Save your notes internally and provide a comprehensive final answer. Only message the user if you are unable to find specific information, explaining what you have done so far.
 
 # Action Space
 {self.action_space.describe(with_long_description=False, with_examples=True)}
 
-# Note 1
-You should not attempt to visit the following domains as they will block your entry:
-- Reddit: www.reddit.com
-- Zillow: www.zillow.com
-- StreetEasy: www.streeteasy.com
-- ApartmentFinder: www.apartmentfinder.com
-- Quora: www.quora.com
-- Expedia: www.expedia.com
-- TripAdvisor: www.tripadvisor.com
-- TicketMaster: www.ticketmaster.com
-- Indeed: www.indeed.com
-If you accidentally enter any of these websites, go back or revisit Google to try other websites.
-"""
-        scrolling_prompt = """
-scroll(delta_x: float, delta_y: float)
-    Examples:
-        scroll(0, 200)
+# Action Tips
+- Always enclose string inputs in 'single quotes'. You must not enclose bid inputs in [brackets].
+- If the corresponding bid is not visible, scroll down until it appears.
+- Your response will be executed as a Python function call, so ensure it adheres to the format and argument data type specifications defined in the action space.
 
-        scroll(-50.2, -100.5)
+# Domain Blacklist
+Do not visit the following domains as they will block your entry:
+- www.reddit.com
+- www.zillow.com
+- www.streeteasy.com
+- www.apartmentfinder.com
+- www.quora.com
+- www.expedia.com
+- www.tripadvisor.com
+- www.ticketmaster.com
+- www.indeed.com
+- www.walmart.com
+- www.newegg.com
+- www.realtor.com
+If you accidentally enter any of these websites, go back or revisit Google to try other websites.
+
+# Browsing Tips
+- Tab Management: Only open one tab at a time.
+- Element Interaction: Interact only with elements starting with bracketed IDs; others are for information or out of view.
+- Exploring Pages: Scroll up and down if more information is needed.
+- Dialog Prioritization: Respond to dialogs immediately to proceed. Accept cookies, select "No Thanks" for insurance offers, and click "Continue" if relevant boxes are filled out.
+- You can only open one tab at a time. You can only interact with elements starting with [id]; the rest are for information only or out of view.
 """
-        system_msg = system_msg.replace(scrolling_prompt, '')
+        #         scrolling_prompt = """
+        # scroll(delta_x: float, delta_y: float)
+        #     Examples:
+        #         scroll(0, 200)
+
+        #         scroll(-50.2, -100.5)
+        # """
+        #         system_msg = system_msg.replace(scrolling_prompt, '')
 
         focus_prompt = """
 focus(bid: str)
@@ -517,6 +536,15 @@ hover(bid: str)
                     with_clickable=True,
                     filter_visible_only=True,
                 )
+                # {'scrollTop': 0, 'windowHeight': 720, 'documentHeight': 720, 'remainingPixels': 0}
+                cur_axtree_txt = (
+                    f"URL {last_obs.url}\n"
+                    f"Scroll Position: {last_obs.scroll_position['scrollTop']}, "
+                    f"Window Height: {last_obs.scroll_position['windowHeight']}, "
+                    f"Webpage Height: {last_obs.scroll_position['documentHeight']}, "
+                    f"Remaining Pixels: {last_obs.scroll_position['remainingPixels']}\n"
+                ) + cur_axtree_txt
+                logger.info(last_obs.scroll_position)
             except Exception as e:
                 logger.error(
                     'Error when trying to process the accessibility tree: %s', e
@@ -530,8 +558,22 @@ hover(bid: str)
 
         ### Above is record keeping by world model
 
+        clean_axtree_lines = []
+        num_static_text_lines = 0
+        max_static_text_lines = 10
+        for line in cur_axtree_txt.split('\n'):
+            if line.strip().startswith('StaticText'):
+                num_static_text_lines += 1
+            else:
+                num_static_text_lines = 0
+
+            if num_static_text_lines <= max_static_text_lines:
+                clean_axtree_lines.append(line)
+        clean_axtree_txt = '\n'.join(clean_axtree_lines)
+
         current_obs = {
-            'axtree_txt': cur_axtree_txt,
+            'axtree_txt': clean_axtree_txt,
+            'raw_axtree_txt': cur_axtree_txt,
             # 'axtree_txt': "AXSTART "+cur_axtree_txt+" AXEND",
             'last_action_error': error_prefix,
             'goal': goal,
@@ -597,8 +639,15 @@ hover(bid: str)
 
         action, explanation = self.effectuator(main_prompt)
         if (
-            len(actions) >= 4
-            and actions[-1] == actions[-2] == actions[-3] == actions[-4]
+            len(actions) >= 10
+            and actions[-1]
+            == actions[-2]
+            == actions[-3]
+            == actions[-4]
+            == actions[-5]
+            == actions[-6]
+            == actions[-7]
+            == actions[-8]
         ):
             action = "send_msg_to_user('It seems I am stuck. Could you help me out?')"
 
@@ -612,6 +661,8 @@ hover(bid: str)
         self.full_output_dict['full_output'] = self.full_output
 
         self.full_output_json = json.dumps(self.full_output_dict)
+
+        time.sleep(random.random() * 5)
 
         self.actions.append(action)
         self.explanations.append(explanation)

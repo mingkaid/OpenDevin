@@ -144,7 +144,8 @@ class OpenDevinSession:
             printable = message
         elif 'action' in message:
             self.action_messages.append(message['message'])
-            printable = message
+            # printable = message
+            printable = {k: v for k, v in message.items() if k not in 'args'}
         elif 'extras' in message and 'screenshot' in message['extras']:
             image_data = base64.b64decode(message['extras']['screenshot'])
             try:
