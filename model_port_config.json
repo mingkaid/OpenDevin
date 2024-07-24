@@ -15,6 +15,11 @@
         "provider": "openai",
         "port": 8002
     },
+    "Meta-Llama-3.1-70B-Instruct-Backup":
+    {
+        "provider": "openai",
+        "port": 8004
+    },
     "gpt-4o":
     {
         "base_url": "https://api.openai.com/v1/"
