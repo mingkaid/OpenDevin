@@ -249,6 +249,7 @@ class MyMainPrompt(PromptElement):
         obs_history,
         states,
         strategies,
+        explanations,
         actions,
         active_strategy=None,
         action_space=None,
@@ -258,11 +259,14 @@ class MyMainPrompt(PromptElement):
         self.obs_history = obs_history
         self.states = states
         self.strategies = strategies
+        self.explanations = explanations
         self.actions = actions
         self.active_strategy = active_strategy
         self.action_space = action_space
 
-        self.history = self.get_history(obs_history, states, strategies, actions)
+        self.history = self.get_history(
+            obs_history, states, strategies, explanations, actions
+        )
         # self.instructions = self.get_goal_instruction(obs_history[-1]["goal"])
 
         # Several modes
@@ -277,17 +281,28 @@ class MyMainPrompt(PromptElement):
         if len(obs_history) == len(states) + 1 and len(states) == len(strategies):
             # encoding, use just the obs
             self.obs = self.get_obs(obs_history[-1])
-            window = 3
+            window = min(3, len(states))
             self.history = self.get_history(
-                obs_history, states[-window:], strategies[-window:], actions[-window:]
+                obs_history,
+                states[-window:],
+                strategies[-window:],
+                explanations[-window:],
+                actions[-window:],
             )
+            # self.history = self.get_history(
+            #     obs_history, states[:], strategies[:], explanations[:], actions[:]
+            # )
         elif (
             len(obs_history) == len(states)
             and len(states) == len(strategies) + 1
             and len(strategies) == len(actions)
         ):
             # strategy, use the obs and the state
+            # also the first step in dynamics
             self.obs = self.get_obs_state(obs_history[-1], states[-1])
+            self.history = self.get_history(
+                obs_history, states[:-1], strategies[:], explanations[:], actions[:]
+            )
         elif (
             len(obs_history) == len(states)
             and len(states) == len(strategies)
@@ -296,6 +311,9 @@ class MyMainPrompt(PromptElement):
             # policy, use obs, state, and strategy
             self.obs = self.get_obs_state_strat(
                 obs_history[-1], states[-1], active_strategy
+            )
+            self.history = self.get_history(
+                obs_history, states[:-1], strategies[:-1], explanations[:], actions[:]
             )
         elif (
             len(obs_history) <= len(states)
@@ -308,6 +326,9 @@ class MyMainPrompt(PromptElement):
         elif len(obs_history) < len(states) and len(states) == len(strategies) + 1:
             # rollout strategy, use state
             self.obs = self.get_state(states[-1])
+            self.history = self.get_history(
+                obs_history, states[:-1], strategies[:], explanations[:], actions[:]
+            )
 
         # self.action_space = MyActionSpace()
 
@@ -323,7 +344,7 @@ class MyMainPrompt(PromptElement):
     # """
     #         return prompt
 
-    def get_history(self, obs_history, states, strategies, actions):
+    def get_history(self, obs_history, states, strategies, explanations, actions):
         # assert len(obs_history) == len(states) or len(obs_history) == len(states) + 1
         # assert len(obs_history) == len(actions) + 1
         # assert len(states) == len(actions) or len(states) == len(actions) + 1
@@ -331,23 +352,30 @@ class MyMainPrompt(PromptElement):
 
         self.history_steps = []
 
-        for i in range(1, len(states)):
+        for i in range(1, len(states) + 1):
             history_step = self.get_history_step(
                 None,
                 states[i - 1],
-                strategies[i - 1],
-                actions[i - 1] if i <= len(actions) else None,
+                strategies[i - 1]
+                if (len(strategies) > 0 and i <= len(strategies))
+                else None,
+                explanations[i - 1]
+                if (len(explanations) > 0 and i <= len(explanations))
+                else None,
+                actions[i - 1] if (len(actions) > 0 and i <= len(actions)) else None,
             )
 
             self.history_steps.append(history_step)
 
         prompts = ['\n# History of interaction with the task:\n']
         for i, step in enumerate(self.history_steps):
-            prompts.append(f'## Step {i}')
+            num_steps_away = len(self.history_steps) - i
+            # prompts.append(f'## Step {i}')
+            prompts.append(f'## {num_steps_away} Steps Earlier')
             prompts.append(step)
         return '\n'.join(prompts) + '\n'
 
-    def get_history_step(self, current_obs, state, strategy, action):
+    def get_history_step(self, current_obs, state, strategy, explanation, action):
         if current_obs is not None:
             self.ax_tree = AXTree(
                 current_obs['axtree_txt'],
@@ -364,6 +392,7 @@ class MyMainPrompt(PromptElement):
             self.observation = f'{self.error.prompt}{self.ax_tree.prompt}'
         self.state = state
         self.strategy = strategy
+        self.explanation = explanation
         self.action = action
 
         prompt = ''
@@ -376,7 +405,7 @@ class MyMainPrompt(PromptElement):
             prompt += f'\n### Strategy:\n{self.strategy}\n'
 
         if action is not None:
-            prompt += f'\n### Action:\n{self.action}\n'
+            prompt += f'\n### Action:\n{self.explanation}\n{self.action}\n'
 
         return prompt
 
@@ -432,11 +461,11 @@ class MyMainPrompt(PromptElement):
 
 Here is an abstract version of the answer with description of the content of each tag. Make sure you follow this structure, but replace the content with your answer:
 <explanation>
-Describe what the action to be taken is trying to do using a single concise sentence. Break down the active strategy into individual, manageable actions. Avoid long, complex search terms. Focus on the single action. Use first-person perspective like "I am doing something." If you encounter trouble using the search button, try hitting enter on the search box instead. If you have trouble clicking on something, try scrolling down by 500 pixels first. Use clear and simple language to detail each step.
+Describe what the action to be taken is trying to do using a single concise sentence. Break down the active strategy into individual, manageable actions. Avoid long, complex search terms. Focus on the single action. Use first-person perspective like "I am doing something." If you encounter trouble using the search button, try hitting enter on the search box instead. If you fail to click on something, try scrolling down by 500 pixels first. If an element is no longer visible, try scrolling up by 500 pixels. Use clear and simple language to describe your action.
 </explanation>
 
 <action>
-Based on the current observation, state, active strategy, and action history, select one single action to be executed. Use only one action at a time. You must not enclose bid inputs in [brackets]. Your response will be executed as a Python function call, so ensure it adheres to the format and argument data type specifications defined in the action space.
+Based on the current observation, state, active strategy, and action history, select one single action to be executed. Use only one action at a time. You must not enclose bid inputs in [brackets]. Interact only with elements in the current observation. Your response will be executed as a Python function call, so ensure it adheres to the format and argument data type specifications defined in the action space.
 </action>
 """
 
@@ -471,7 +500,7 @@ fill('32-12', 'example with "quotes"')
 
 Here is an abstract version of the answer with description of the content of each tag. Make sure you follow this structure, but replace the content with your answer:
 <state>
-Summarize the current state of the webpage, focusing on the most recent action you took and any errors encountered. Note any dialogs, progress indicators, or significant changes such as items in your cart or sites visited. Describe the impact of your previous action on the webpage, including any new interactive elements. Include any inferred information that may help achieve the goal. Report any error messages displayed. Do not include your next planned actions; focus solely on providing an objective summary.
+Summarize the current state of the webpage observation, focusing on the most recent action you took and any errors encountered. Note any dialogs, progress indicators, or significant changes such as items in your cart or sites visited. Describe the impact of your previous action on the webpage, including any new interactive elements. Include any inferred information that may help achieve the goal. Information from steps earlier are for reference only. Focus on objective description of the current observation and any inferences you can draw from it. Report any error messages displayed. Do not include your next planned actions; focus solely on providing an objective summary.
 </state>\
 
 <progress>
@@ -489,13 +518,13 @@ Be cautious when assigning the "in-progress" label. If uncertain, choose "not-su
 
 Here is a concrete example of how to format your answer. Make sure to follow the template by wrapping with proper html starting and closing tags:
 <state>
-The previous action resulted in a timeout error, indicating no changes were made to the page. Thus far, I have visited ABC.com and DEF.com, discovering information G and H, respectively. The current page contains a dialog with id 789 prompting whether to add protection, offering coverage options and the choices "Add Protection" or "No Thanks". A link with id 234 indicates "1 item in cart", revealing a cellphone in the cart with a subtotal of $345. I searched for a 5-night hotel stay, but results only showed availability for a 6-night stay, suggesting a 5-night stay is unavailable. The page displays:
-- An empty textbox with id 123 labeled "Date", indicating it is likely for date input.
-- A button with id 456 labeled "Submit" positioned below textbox 123, suggesting it submits the date entered in the textbox.
+The previous action resulted in a timeout error, indicating no changes were made to the page. Thus far, I have visited ABC.com and DEF.com, discovering information G and H, respectively. The current page contains a dialog prompting whether to add protection, offering coverage options and the choices "Add Protection" or "No Thanks". A link indicates "1 item in cart", revealing a cellphone in the cart with a subtotal of $345. I searched for a 5-night hotel stay, but results only showed availability for a 6-night stay, suggesting a 5-night stay is unavailable. The page displays:
+- An empty textbox in the middle labeled "Date", indicating it is likely for date input.
+- A button below labeled "Submit" positioned below textbox 123, suggesting it submits the date entered in the textbox.
 Additionally, there are:
-- A notification with id 101 displaying "Error: Invalid date format" when attempting to submit the date.
-- A dropdown menu with id 102 labeled "Room Type" containing options "Single", "Double", and "Suite".
-- A section with id 103 showing "Total Price: $0.00", implying the total cost updates dynamically based on selections.
+- A notification below the button displaying "Error: Invalid date format" when attempting to submit the date.
+- A dropdown menu labeled "Room Type" containing options "Single", "Double", and "Suite".
+- A section showing "Total Price: $0.00", implying the total cost updates dynamically based on selections.
 The page did not display any new errors after the latest action, apart from the timeout issue.
 I clicked the "Submit" button on the booking form, but no confirmation message appeared, and the page did not change. There is no indication whether the submission was successful or not. I need to reassess the page for any subtle changes or possible errors.
 </state>\
@@ -504,6 +533,16 @@ I clicked the "Submit" button on the booking form, but no confirmation message a
 not-sure
 </progress>
 """
+
+        #         The previous action resulted in a timeout error, indicating no changes were made to the page. Thus far, I have visited ABC.com and DEF.com, discovering information G and H, respectively. The current page contains a dialog with id 789 prompting whether to add protection, offering coverage options and the choices "Add Protection" or "No Thanks". A link with id 234 indicates "1 item in cart", revealing a cellphone in the cart with a subtotal of $345. I searched for a 5-night hotel stay, but results only showed availability for a 6-night stay, suggesting a 5-night stay is unavailable. The page displays:
+        # - An empty textbox with id 123 labeled "Date", indicating it is likely for date input.
+        # - A button with id 456 labeled "Submit" positioned below textbox 123, suggesting it submits the date entered in the textbox.
+        # Additionally, there are:
+        # - A notification with id 101 displaying "Error: Invalid date format" when attempting to submit the date.
+        # - A dropdown menu with id 102 labeled "Room Type" containing options "Single", "Double", and "Suite".
+        # - A section with id 103 showing "Total Price: $0.00", implying the total cost updates dynamically based on selections.
+        # The page did not display any new errors after the latest action, apart from the timeout issue.
+        # I clicked the "Submit" button on the booking form, but no confirmation message appeared, and the page did not change. There is no indication whether the submission was successful or not. I need to reassess the page for any subtle changes or possible errors.
 
         # foo = 'Include details such as accessibility tree id when describing elements on the page.'
 
@@ -540,6 +579,10 @@ Click through the form fields to explore available options and ensure all mandat
         return prompt
 
     def get_dynamics_prompt(self) -> str:
+        if len(self.obs_history) == len(self.states):
+            self.obs = self.get_obs_state_strat(
+                self.obs_history[-1], self.states[-1], self.strategies[-1]
+            )
         prompt = f"""\
 {self.obs}\
 """
@@ -588,6 +631,10 @@ in-progress
         return prompt
 
     def get_action_reward_prompt(self) -> str:
+        if len(self.obs_history) == len(self.states):
+            self.obs = self.get_obs_state_strat(
+                self.obs_history[-1], self.states[-1], self.strategies[-1]
+            )
         prompt = f"""\
 {self.obs}\
 """

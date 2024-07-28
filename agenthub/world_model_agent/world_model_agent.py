@@ -63,24 +63,26 @@ client = OpenAI()
 #     pass
 
 
-def sample_action(obs_history, states, strategies, actions, policy):
+def sample_action(obs_history, states, strategies, explanations, actions, policy):
     main_prompt = MyMainPrompt(
         obs_history=obs_history,
         states=states,
         strategies=strategies,
-        # actions=actions,
+        explanations=explanations,
         actions=actions,
     )
     strategy = policy(main_prompt)
     return strategy
 
 
-def sample_action_reward(obs_history, states, strategies, actions, action_reward):
+def sample_action_reward(
+    obs_history, states, strategies, explanations, actions, action_reward
+):
     main_prompt = MyMainPrompt(
         obs_history=obs_history,
         states=states,
         strategies=strategies,
-        # actions=actions,
+        explanations=explanations,
         actions=actions,
     )
     fast_reward, think, response = action_reward(main_prompt)
@@ -307,7 +309,7 @@ Review the current state of the page and all other information to find the best 
 {self.action_space.describe(with_long_description=False, with_examples=True)}
 
 # Action Tips
-- Always enclose string inputs in 'single quotes'. You must not enclose bid inputs in [brackets].
+- Always enclose string inputs in 'single quotes', including bid inputs.
 - If the corresponding bid is not visible, scroll down until it appears.
 - Your response will be executed as a Python function call, so ensure it adheres to the format and argument data type specifications defined in the action space.
 
@@ -325,15 +327,37 @@ Do not visit the following domains as they will block your entry:
 - www.walmart.com
 - www.newegg.com
 - www.realtor.com
+- www.glassdoor.com
+- www.seatgeek.com
+- www.vividseats.com
 If you accidentally enter any of these websites, go back or revisit Google to try other websites.
 
 # Browsing Tips
-- Tab Management: Only open one tab at a time.
-- Element Interaction: Interact only with elements starting with bracketed IDs; others are for information or out of view.
-- Exploring Pages: Scroll up and down if more information is needed.
-- Dialog Prioritization: Respond to dialogs immediately to proceed. Accept cookies, select "No Thanks" for insurance offers, and click "Continue" if relevant boxes are filled out.
-- You can only open one tab at a time. You can only interact with elements starting with [id]; the rest are for information only or out of view.
+- Interact only with elements on the current page starting with bracketed IDs; others are for information or out of view.
+- Scroll up and down if more information is needed.
+- Respond to dialogs immediately to proceed. Accept cookies, select "No Thanks" for insurance offers, and click "Continue" or "Select" button if relevant boxes are filled out.
+- You can only open one tab at a time. You can only interact with elements starting with bids; the rest are for information only or out of view.
+- If you are blocked by CAPTCHA, consider going back to the previous page or restart your search.
+- If you use go_back() repeatedly but cannot go back to the previous page, consider going to www.google.com to restart your browsing.
+- "Alh6id" and "lst-ib" are not valid element IDs.
+
+# Combobox Tips
+- If a combobox is not clickable, clicking on the section containing it may bring up a dialog with options to select from.
+- If a combobox has autocomplete, filling it with text may bring up a dialog with related options that you can click on to select from.
 """
+
+        # - If you enter arithmetic expressions into Google Search, you will see a calculator tool showing the computed result. The term "Alh6id" is not a valid id you can enter.
+        #         # Browsing Tips
+        # - Interact only with elements on the current page starting with bracketed IDs; others are for information or out of view.
+        # - Scroll up and down if more information is needed.
+        # - Respond to dialogs immediately to proceed. These typically appear at the end of the page and might not have the label "dialog". Accept cookies, select "No Thanks" for insurance offers, and click "Continue" or "Select" button if relevant boxes are filled out.
+        # - You can only open one tab at a time. You can only interact with elements starting with bids; the rest are for information only or out of view.
+        # - If you are blocked by CAPTCHA, consider going back to the previous page or restart your search.
+        # - If you have trouble with go_back(), consider going back to www.google.com.
+
+        # # Combobox Tips
+        # - If a combobox is not clickable, clicking on the section containing it may bring up a dialog with options to select from.
+        # - If a combobox has autocomplete, first fill it with text, which may bring up a dialog with related options. Then click on one of the options to select it.
         #         scrolling_prompt = """
         # scroll(delta_x: float, delta_y: float)
         #     Examples:
@@ -350,13 +374,22 @@ focus(bid: str)
 """
         system_msg = system_msg.replace(focus_prompt, '')
 
+        select_option_prompt = """
+select_option(bid: str, options: str | list[str])
+    Examples:
+        select_option('48', 'blue')
+
+        select_option('48', ['red', 'green', 'blue'])
+"""
+        system_msg = system_msg.replace(select_option_prompt, '')
+
         hover_prompt = """
 hover(bid: str)
     Examples:
         hover('b8')
 """
         system_msg = system_msg.replace(hover_prompt, '')
-        # print(system_msg)
+        # logger.info(system_msg)
         messages = []
         messages.append({'role': 'system', 'content': system_msg})
         messages.append({'role': 'user', 'content': prompt})
@@ -395,6 +428,7 @@ hover(bid: str)
 
     def encoder(self, main_prompt):
         prompt = main_prompt.get_encoder_prompt()
+        # logger.info(prompt)
         ans_dict = self.get_llm_output(
             prompt, main_prompt._parse_encoder_answer, ['state', 'progress']
         )
@@ -406,6 +440,9 @@ hover(bid: str)
 
     def policy(self, main_prompt):
         prompt = main_prompt.get_policy_prompt()
+        # logger.info(main_prompt.states)
+        # logger.info(prompt)
+
         temp = self.temperature
         self.temperature = 1.0
         ans_dict = self.get_llm_output(
@@ -417,6 +454,8 @@ hover(bid: str)
 
     def dynamics(self, main_prompt):
         prompt = main_prompt.get_dynamics_prompt()
+        # logger.info(prompt)
+
         ans_dict = self.get_llm_output(
             prompt, main_prompt._parse_dynamics_answer, ['next_state', 'progress']
         )
@@ -426,6 +465,8 @@ hover(bid: str)
 
     def action_reward(self, main_prompt):
         prompt = main_prompt.get_action_reward_prompt()
+        # logger.info(prompt)
+
         ans_dict = self.get_llm_output(
             prompt, main_prompt._parse_action_reward_answer, ['response']
         )
@@ -443,6 +484,8 @@ hover(bid: str)
 
     def effectuator(self, main_prompt):
         prompt = main_prompt.get_effectuator_prompt()
+        # logger.info(prompt)
+
         ans_dict = self.get_llm_output(
             prompt,
             main_prompt._parse_effectuator_answer,
@@ -562,7 +605,9 @@ hover(bid: str)
         num_static_text_lines = 0
         max_static_text_lines = 10
         for line in cur_axtree_txt.split('\n'):
-            if line.strip().startswith('StaticText'):
+            if line.strip().startswith('StaticText') or line.strip().startswith(
+                'ListMarker'
+            ):
                 num_static_text_lines += 1
             else:
                 num_static_text_lines = 0
@@ -583,8 +628,8 @@ hover(bid: str)
             obs_history=self.obs_history,
             states=self.states,
             strategies=self.strategies,
-            # actions=actions,
-            actions=self.explanations,
+            explanations=self.explanations,
+            actions=self.actions,
             active_strategy=self.active_strategy,
         )
 
@@ -631,23 +676,25 @@ hover(bid: str)
             obs_history=self.obs_history,
             states=self.states,
             strategies=self.strategies,
-            # actions=actions,
-            actions=self.explanations,
+            explanations=self.explanations,
+            actions=self.actions,
             active_strategy=self.active_strategy,
             action_space=self.action_space,
         )
 
         action, explanation = self.effectuator(main_prompt)
-        if (
-            len(actions) >= 10
-            and actions[-1]
-            == actions[-2]
-            == actions[-3]
-            == actions[-4]
-            == actions[-5]
-            == actions[-6]
-            == actions[-7]
-            == actions[-8]
+        if len(actions) >= 10 and (
+            (
+                actions[-1]
+                == actions[-2]
+                == actions[-3]
+                == actions[-4]
+                == actions[-5]
+                == actions[-6]
+                == actions[-7]
+                == actions[-8]
+            )
+            or (len(set(actions[-8:])) <= 2)
         ):
             action = "send_msg_to_user('It seems I am stuck. Could you help me out?')"
 
@@ -723,8 +770,8 @@ hover(bid: str)
                     obs_history=self.obs_history,
                     states=self.states + new_states,
                     strategies=self.strategies + new_actions,
-                    # actions=actions,
-                    actions=self.explanations,
+                    explanations=self.explanations,
+                    actions=self.actions,
                 )
                 node.state, node.status, node.is_terminal = self.dynamics(main_prompt)
                 logger.info(f'*Expanded Strategy*: {node.action}')
@@ -774,6 +821,7 @@ hover(bid: str)
                             self.states + new_states,
                             self.strategies + new_actions,
                             self.explanations,
+                            self.actions,
                             self.policy,
                         )
                     ] * n_actions
@@ -788,6 +836,7 @@ hover(bid: str)
                             self.states + new_states,
                             self.strategies + new_actions + [action],
                             self.explanations,
+                            self.actions,
                             self.action_reward,
                         )
                         for action in sampled_actions
