@@ -4,11 +4,10 @@
         "provider": "openai",
         "port": 8000
     },
-
-    "Meta-Llama-3-70B-Instruct":
+    "Meta-Llama-3.1-405B-Instruct-FP8":
     {
-        "provider": "openai",
-        "port": 8001
+        "provider": "openai/meta-llama",
+        "base_url": "https://api-inference.huggingface.co/v1/"
     },
     "ft-Meta-Llama-3-8B-Instruct":
     {
