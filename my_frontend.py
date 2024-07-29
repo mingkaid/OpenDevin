@@ -593,7 +593,7 @@ def get_messages(
             # session.model = model_port_config[model_selection]["provider"] + '/' + model_selection
             session.model = model_selection
             print('API Key:', api_key)
-            session.api_key = api_key if len(api_key) > 0 else 'test'
+            session.api_key = api_key if len(api_key) > 0 else 'token-abc123'
             action_messages = []
             browser_history = browser_history[:1]
             for agent_state in session.initialize(as_generator=True):

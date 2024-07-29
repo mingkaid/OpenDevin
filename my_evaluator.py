@@ -47,19 +47,43 @@ from my_frontend import OpenDevinSession
 # ]
 # 2024-07-23-18-14-41
 questions = [
-    "What is the age difference between Pete Buttigieg's current partner and Taylor Swift's current partner?",
-    'What is the difference in flight time in minutes between LA to San Francisco and LA to San Jose?',
+    "Using google search, what is the age difference between Pete Buttigieg's current partner and Taylor Swift's current partner?",
+    'Using google search, what is the difference in flight time in minutes between LA to San Francisco and LA to San Jose?',
     'Using google search, who has the highest salary? An average software engineer in Silicon Valley, an average lawyer in New York City, or an average doctor in Los Angeles?',
     'What is the top-3 best-selling women’s dress on Amazon?',
-    'Compare the difference in time for walking and driving route from CMU to AMC waterfront.',
+    'Compare the difference in time for walking and driving route from Carnegie Mellon University to AMC Waterfront.',
     'Tell me the number of reviews that the Kebab Shop next to UCSD received on Yelp that mention the term "lamb"',
     'Can you find three laptops from Amazon and three from eBay, each priced under $1,000, with at least 16GB of RAM and a dedicated GPU?',
-    'I live at 4463 Oak Grove Dr, La Cañada Flintridge, CA 91011. Can you find three nearby Mediterranean restaurants with ratings above 4.0 stars and reviews that mention lamb using Yelp?',
+    'I live at La Cañada Flintridge, CA. Can you find three nearby Mediterranean restaurants with ratings above 4.0 stars and reviews that mention lamb using Yelp?',
     'I want to buy a black queen mattress with a budget of $300. Can you find one option each from Amazon and eBay?',
     'On Amazon, find the cheapest gaming computer with a rating higher than 4.0 and add it to the shopping cart.',
     'Can you purchase a one way flight from Los Angeles to San Francisco this Saturday using google flight?',
     'Can you find two cheapest available tickets to the next Taylor Swift concert?',
+    "Use google search as calculator to answer the following question: Janet's ducks lay 16 eggs per day. She eats three for breakfast every morning and bakes muffins for her friends every day with four. She sells the remainder at the farmers' market daily for $2 per fresh duck egg. How much in dollars does she make every day at the farmers' market?",
+    'Use google search as calculator to answer the following question: A robe takes 2 bolts of blue fiber and half that much white fiber. How many bolts in total does it take?',
+    'Use google search as calculator to answer the following question: Josh decides to try flipping a house. He buys a house for $80,000 and then puts in $50,000 in repairs. This increased the value of the house by 150%. How much profit did he make?',
 ]
+
+# math_questions = ["Janet's ducks lay 16 eggs per day. She eats three for breakfast every morning and bakes muffins for her friends every day with four. She sells the remainder at the farmers' market daily for $2 per fresh duck egg. How much in dollars does she make every day at the farmers' market?",
+#                   "A robe takes 2 bolts of blue fiber and half that much white fiber. How many bolts in total does it take?",
+#                   "Josh decides to try flipping a house. He buys a house for $80,000 and then puts in $50,000 in repairs. This increased the value of the house by 150%. How much profit did he make?",]
+
+# math_questions = ["Use google search as calculator to answer the following question: Janet's ducks lay 16 eggs per day. She eats three for breakfast every morning and bakes muffins for her friends every day with four. She sells the remainder at the farmers' market daily for $2 per fresh duck egg. How much in dollars does she make every day at the farmers' market?",
+#                   "Use google search as calculator to answer the following question: A robe takes 2 bolts of blue fiber and half that much white fiber. How many bolts in total does it take?",
+#                   "Use google search as calculator to answer the following question: Josh decides to try flipping a house. He buys a house for $80,000 and then puts in $50,000 in repairs. This increased the value of the house by 150%. How much profit did he make?",]
+
+# math_questions = ["Use google search as calculator to answer the following question: Mark's car breaks down and he needs to get a new radiator. The cost for a new radiator is $400 but he goes to get it at a junk shop and gets it for 80% off. He then hires a mechanic to install it and it takes 3 hours at $50 an hour. How much did he pay?",
+#                   "Use google search as calculator to answer the following question: Farmer Brown has 20 animals on his farm, all either chickens or cows. They have a total of 70 legs, all together. How many of the animals are chickens?",
+#                   "Use google search as calculator to answer the following question: Henry and 3 of his friends order 7 pizzas for lunch. Each pizza is cut into 8 slices. If Henry and his friends want to share the pizzas equally, how many slices can each of them have?",]
+
+math_questions = [
+    "Use google search as calculator to answer the following question: Mark's car breaks down and he needs to get a new radiator. The cost for a new radiator is $400 but he goes to get it at a junk shop and gets it for 80% off. He then hires a mechanic to install it and it takes 3 hours at $50 an hour. How much did he pay? Do the calculation on your own and don't search for the answer directly. Don't include extra text when you perform the calculation.",
+    "Use google search as calculator to answer the following question: Farmer Brown has 20 animals on his farm, all either chickens or cows. They have a total of 70 legs, all together. How many of the animals are chickens? Do the calculation on your own and don't search for the answer directly. Don't include extra text when you perform the calculation.",
+    "Use google search as calculator to answer the following question: Henry and 3 of his friends order 7 pizzas for lunch. Each pizza is cut into 8 slices. If Henry and his friends want to share the pizzas equally, how many slices can each of them have? Do the calculation on your own and don't search for the answer directly. Don't include extra text when you perform the calculation.",
+]
+
+
+# questions = math_questions
 
 
 def run_question(args, qid, start_datetime):
@@ -76,7 +100,7 @@ def run_question(args, qid, start_datetime):
         print(qid, agent_state)
 
     action_messages = []
-    max_steps = 20
+    max_steps = 30
     for message in session.run(question):
         if len(session.action_messages) > len(action_messages):
             diff = len(session.action_messages) - len(action_messages)
