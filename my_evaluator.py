@@ -134,9 +134,7 @@ def main():
     parser.add_argument('job_name', type=str)
     parser.add_argument('--agent', type=str, default='WorldModelAgent')
     parser.add_argument('--port', type=int, default=5000)
-    parser.add_argument(
-        '--model', type=str, default='meta-llama/Meta-Llama-3.1-70B-Instruct'
-    )
+    parser.add_argument('--model', type=str, default='Meta-Llama-3.1-70B-Instruct')
     parser.add_argument('--api_key', type=str, default='token-abc123')
 
     # Parse the arguments

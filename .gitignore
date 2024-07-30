@@ -187,6 +187,8 @@ frontend/yarn.lock
 frontend/coverage
 test_results*
 /_test_files_tmp/
+test.py
+/my_evaluator_logs
 
 # production
 frontend/build

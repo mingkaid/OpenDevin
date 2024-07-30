@@ -71,8 +71,8 @@ def sample_action(obs_history, states, strategies, explanations, actions, policy
         explanations=explanations,
         actions=actions,
     )
-    strategy = policy(main_prompt)
-    return strategy
+    strategy, summary = policy(main_prompt)
+    return strategy, summary
 
 
 def sample_action_reward(
@@ -446,11 +446,11 @@ hover(bid: str)
         temp = self.temperature
         self.temperature = 1.0
         ans_dict = self.get_llm_output(
-            prompt, main_prompt._parse_policy_answer, ['strategy']
+            prompt, main_prompt._parse_policy_answer, ['strategy', 'summary']
         )
         self.temperature = temp
 
-        return ans_dict['strategy']
+        return ans_dict['strategy'], ans_dict['summary']
 
     def dynamics(self, main_prompt):
         prompt = main_prompt.get_dynamics_prompt()
@@ -489,11 +489,11 @@ hover(bid: str)
         ans_dict = self.get_llm_output(
             prompt,
             main_prompt._parse_effectuator_answer,
-            ['action', 'explanation'],
+            ['action', 'explanation', 'summary'],
             override_llm=False,
         )
 
-        return ans_dict['action'], ans_dict['explanation']
+        return ans_dict['action'], ans_dict['explanation'], ans_dict['summary']
 
     def step(self, env_state: State) -> Action:
         """
@@ -682,7 +682,7 @@ hover(bid: str)
             action_space=self.action_space,
         )
 
-        action, explanation = self.effectuator(main_prompt)
+        action, explanation, summary = self.effectuator(main_prompt)
         if len(actions) >= 10 and (
             (
                 actions[-1]
@@ -700,9 +700,12 @@ hover(bid: str)
 
         logger.info(f'*Action*: {action}')
         # self.full_output += f'*Action*: {action}\n'
+        logger.info(f'*Summary*: {summary}')
         self.full_output += f'*Action*: {explanation}\n'
+        self.full_output += f'*Summary*: {summary}\n'
         self.full_output_dict['explanation'] = explanation
         self.full_output_dict['action'] = action
+        self.full_output_dict['summary'] = summary
 
         llm_output_logger.info(self.full_output)
         self.full_output_dict['full_output'] = self.full_output
@@ -846,14 +849,16 @@ hover(bid: str)
                     )
 
                 # action_space = {action: (fast_reward, think) for action, (fast_reward, think) in}
-                for action, (fast_reward, think, response) in zip(
+                for (action, summary), (fast_reward, think, response) in zip(
                     sampled_actions, sampled_action_rewards
                 ):
                     logger.info(f'*Strategy Candidate*: {action}')
+                    logger.info(f'*Summary*: {summary}')
                     logger.info(f'*Fast Reward Reasoning*: {think}')
                     logger.info(f'*Fast Reward*: {fast_reward}')
 
                     self.full_output += f'*Strategy Candidate*: {action}\n'
+                    self.full_output += f'*Summary*: {summary}\n'
                     self.full_output += f'*Fast Reward Reasoning*: {think}\n'
                     self.full_output += f'*Fast Reward*: {fast_reward}\n'
 

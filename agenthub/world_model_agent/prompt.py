@@ -464,6 +464,10 @@ Here is an abstract version of the answer with description of the content of eac
 Describe what the action to be taken is trying to do using a single concise sentence. Break down the active strategy into individual, manageable actions. Avoid long, complex search terms. Focus on the single action. Use first-person perspective like "I am doing something." If you encounter trouble using the search button, try hitting enter on the search box instead. If you fail to click on something, try scrolling down by 500 pixels first. If an element is no longer visible, try scrolling up by 500 pixels. Use clear and simple language to describe your action.
 </explanation>
 
+<summary>
+Based on the explanation, summarize the explanation down to with 5 words.
+</summary>
+
 <action>
 Based on the current observation, state, active strategy, and action history, select one single action to be executed. Use only one action at a time. You must not enclose bid inputs in [brackets]. Interact only with elements in the current observation. Your response will be executed as a Python function call, so ensure it adheres to the format and argument data type specifications defined in the action space.
 </action>
@@ -476,6 +480,10 @@ Here is a concrete example of how to format your answer. Make sure to follow the
 <explanation>
 I am filling out the textbox for Date with 'example with "quotes"'
 </explanation>
+
+<summary>
+Filling textbox for date.
+</summary>
 
 <action>
 fill('32-12', 'example with "quotes"')
@@ -563,6 +571,10 @@ Here is an abstract version of the answer with description of the content of eac
 <strategy>
 Given that previous actions have been completed and the environment has transitioned to the current inferred state, describe the next action to achieve the goal. Break down the goal into clear, manageable steps. Avoid using phrases such as "To accomplish the goal," "I will," "To proceed," or "Assume the previous strategies have been carried out." Refrain from mentioning specific element IDs as they may change during execution. Limit your response to one sentence and include any details that help select the correct action. Be creative and propose novel methods to achieve the goal. Avoid creating accounts without user permission or providing personal information.
 </strategy>
+
+<summary>
+Given the strategy/action that you just came up with, summarize the strategy/action down to within 5 words in 5 DIFFERENT ways, and choose ONE of them to respond.
+</summary>
 """
 
         prompt += """
@@ -572,6 +584,10 @@ Here is a concrete example of how to format your answer. Make sure to follow the
 <strategy>
 Click through the form fields to explore available options and ensure all mandatory fields are completed.
 </strategy>
+
+<summary>
+Exploring, ensure mandatory fields completed.
+</summary>
 """
 
         # prompt = self.add_screenshot(prompt)
@@ -678,7 +694,9 @@ away-from-the-goal
         ans_dict = {}
         ans_dict.update(
             parse_html_tags_raise(
-                text_answer, keys=['action', 'explanation'], merge_multiple=True
+                text_answer,
+                keys=['action', 'explanation', 'summary'],
+                merge_multiple=True,
             )
         )
 
@@ -711,7 +729,9 @@ away-from-the-goal
     def _parse_policy_answer(self, text_answer):
         ans_dict = {}
         ans_dict.update(
-            parse_html_tags_raise(text_answer, keys=['strategy'], merge_multiple=True)
+            parse_html_tags_raise(
+                text_answer, keys=['strategy', 'summary'], merge_multiple=True
+            )
         )
         return ans_dict
 

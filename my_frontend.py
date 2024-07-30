@@ -10,8 +10,14 @@ import plotly.graph_objects as go
 import websocket
 from PIL import Image, UnidentifiedImageError
 
+# from openai import OpenAI
+
 api_key = os.environ.get('OPENAI_API_KEY')
 LINE_LEN = 100
+LABEL_LEN = 20
+WIDTH = 18
+HEIGHT = 4
+RADIUS = 1
 
 
 class Node:
@@ -25,6 +31,10 @@ class Node:
         self.reward = reward
         self.Q = 0.0
         self.uct = 0.0
+        self.summary = 'Init'
+
+    def set_summary(self, summary):
+        self.summary = summary
 
 
 class OpenDevinSession:
@@ -282,9 +292,13 @@ def parse_log(log_file):
         if line.startswith('*Strategy Candidate*'):
             strat_info = process_string(line.split(': ')[1], LINE_LEN)
 
+        if line.startswith('*Summary*'):
+            summary = process_string(line.split(': ')[1], LABEL_LEN)
+
         if line.startswith('*Fast Reward*'):
             reward = float(line.split(': ')[1])
             nodes[count] = Node(count, strat_info, 'null', 'null', reward, None)
+            nodes[count].set_summary(summary)
             current_node.children.append(nodes[count])
             nodes[count].parent = current_node
             count += 1
@@ -346,7 +360,7 @@ def visualize_tree_plotly(root, nodes):
         highest_q_node = max(nodes_at_level, key=lambda x: x.Q)
         highest_q_nodes.add(highest_q_node.state)
 
-    pos = hierarchy_pos(G, root.state)
+    pos = horizontal_hierarchy_pos(G, root.state)
     edge_x = []
     edge_y = []
 
@@ -363,7 +377,7 @@ def visualize_tree_plotly(root, nodes):
     edge_trace = go.Scatter(
         x=edge_x,
         y=edge_y,
-        line=dict(width=2, color='black'),
+        line=dict(width=2, color='white'),
         hoverinfo='none',
         mode='lines',
         showlegend=False,
@@ -371,9 +385,11 @@ def visualize_tree_plotly(root, nodes):
 
     node_x = []
     node_y = []
-    labels = []
     hover_texts = []
     colors = []
+    shapes = []
+    annotations = []
+    width, height, radius = WIDTH, HEIGHT, RADIUS
 
     for node in G.nodes():
         x, y = pos[node]
@@ -388,11 +404,48 @@ def visualize_tree_plotly(root, nodes):
             f'<b>Status:</b> {nodes[node].status}'
         )
         hover_texts.append(hover_text)
-        labels.append(str(node))
+
+        annotations.append(
+            dict(
+                x=x,
+                y=y,
+                text=nodes[node].summary,
+                xref='x',
+                yref='y',
+                showarrow=False,
+                font=dict(family='Arial', size=12, color='black'),
+                align='center',
+            )
+        )
+
         if node in highest_q_nodes:
             colors.append('pink')
         else:
             colors.append('#FFD700')
+
+        custom_path = (
+            f'M{x - width / 2 + radius},{y - height / 2} '
+            f'L{x + width / 2 - radius},{y - height / 2} '
+            f'Q{x + width / 2},{y - height / 2} {x + width / 2},{y - height / 2 + radius} '
+            f'L{x + width / 2},{y + height / 2 - radius} '
+            f'Q{x + width / 2},{y + height / 2} {x + width / 2 - radius},{y + height / 2} '
+            f'L{x - width / 2 + radius},{y + height / 2} '
+            f'Q{x - width / 2},{y + height / 2} {x - width / 2},{y + height / 2 - radius} '
+            f'L{x - width / 2},{y - height / 2 + radius} '
+            f'Q{x - width / 2},{y - height / 2} {x - width / 2 + radius},{y - height / 2} '
+            f'Z'
+        )
+
+        shapes.append(
+            dict(
+                xref='x',
+                yref='y',
+                type='path',
+                path=custom_path,
+                fillcolor='pink' if node in highest_q_nodes else '#FFD700',
+                line_color='black',
+            )
+        )
 
     node_trace = go.Scatter(
         x=node_x,
@@ -401,18 +454,7 @@ def visualize_tree_plotly(root, nodes):
         hoverinfo='text',
         text=hover_texts,
         hoverlabel=dict(font=dict(size=16)),
-        marker=dict(showscale=False, color=colors, size=40, line_width=4),
-        showlegend=False,
-    )
-
-    label_trace = go.Scatter(
-        x=node_x,
-        y=node_y,
-        mode='text',
-        text=labels,
-        textposition='middle center',
-        hoverinfo='none',
-        textfont=dict(family='Arial', size=16, color='black', weight='bold'),
+        marker=dict(showscale=False, color=colors, size=0),
         showlegend=False,
     )
 
@@ -443,61 +485,87 @@ def visualize_tree_plotly(root, nodes):
     )
 
     fig = go.Figure(
-        data=[edge_trace, node_trace, label_trace, agent_choice_trace, candidate_trace],
+        data=[
+            edge_trace,
+            node_trace,
+            agent_choice_trace,
+            candidate_trace,
+        ],  # label_trace,
         layout=go.Layout(
-            title='Tree visualization of log file',
+            title='Agent Thinking Process',
             titlefont_size=16,
             showlegend=True,
             hovermode='closest',
             margin=dict(b=20, l=5, r=5, t=40),
-            annotations=[dict(text='', showarrow=False, xref='paper', yref='paper')],
-            xaxis=dict(showgrid=False, zeroline=False, visible=False),
-            yaxis=dict(showgrid=False, zeroline=False, visible=False),
-            width=945,
+            xaxis=dict(
+                showgrid=True,
+                zeroline=True,
+                visible=True,
+                range=[-10, 80],
+                fixedrange=True,
+            ),
+            yaxis=dict(
+                showgrid=True,
+                zeroline=True,
+                visible=True,
+                range=[0, 40],
+                fixedrange=True,
+            ),
+            width=920,
             height=540,
+            shapes=shapes,
+            annotations=annotations,
         ),
     )
 
     return fig
 
 
-def hierarchy_pos(G, root, width=1.0, vert_gap=0.1, vert_loc=0, xcenter=0.5):
-    pos = _hierarchy_pos(G, root, width, vert_gap, vert_loc, xcenter)
+def horizontal_hierarchy_pos(
+    G, root, height=30.0, hor_gap=20.0, hor_loc=0, ycenter=17.5
+):
+    pos = _horizontal_hierarchy_pos(G, root, height, hor_gap, hor_loc, ycenter)
     return pos
 
 
-def _hierarchy_pos(
+def _horizontal_hierarchy_pos(
     G,
     root,
-    width=1.0,
-    vert_gap=0.1,
-    vert_loc=0,
-    xcenter=0.5,
+    height=30.0,
+    hor_gap=20.0,
+    hor_loc=0,
+    ycenter=17.5,
     pos=None,
     parent=None,
     parsed=None,
 ):
     if pos is None:
-        pos = {root: (xcenter, vert_loc)}
+        pos = {root: (hor_loc, ycenter)}
     if parsed is None:
         parsed = []
 
-    pos[root] = (xcenter, vert_loc)
+    pos[root] = (hor_loc, ycenter)
     children = list(G.neighbors(root))
     if not isinstance(G, nx.DiGraph) and parent is not None:
         children.remove(parent)
     if len(children) != 0:
-        dx = width / len(children)
-        nextx = xcenter - width / 2 - dx / 2
+        dy = height / len(children)
+        if dy < HEIGHT:
+            dy = HEIGHT
+
+        nexty = ycenter - height / 2 - dy / 2
+        if nexty > 40 - HEIGHT * 7 / 2:
+            nexty = 40 - HEIGHT * 7 / 2
+
         for child in children:
-            nextx += dx
-            pos = _hierarchy_pos(
+            nexty += dy
+            pos = _horizontal_hierarchy_pos(
                 G,
                 child,
-                width=dx,
-                vert_gap=vert_gap,
-                vert_loc=vert_loc - vert_gap,
-                xcenter=nextx,
+                height=dy,
+                hor_gap=hor_gap,
+                hor_loc=hor_loc + hor_gap,
+                ycenter=nexty,
                 pos=pos,
                 parent=root,
                 parsed=parsed,
@@ -593,7 +661,7 @@ def get_messages(
             # session.model = model_port_config[model_selection]["provider"] + '/' + model_selection
             session.model = model_selection
             print('API Key:', api_key)
-            session.api_key = api_key if len(api_key) > 0 else 'token-abc123'
+            session.api_key = api_key if len(api_key) > 0 else 'test'  # token-abc123
             action_messages = []
             browser_history = browser_history[:1]
             for agent_state in session.initialize(as_generator=True):
