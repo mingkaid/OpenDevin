@@ -71,8 +71,8 @@ def sample_action(obs_history, states, strategies, explanations, actions, policy
         explanations=explanations,
         actions=actions,
     )
-    strategy, summary = policy(main_prompt)
-    return strategy, summary
+    strategy = policy(main_prompt)
+    return strategy
 
 
 def sample_action_reward(
@@ -430,13 +430,13 @@ hover(bid: str)
         prompt = main_prompt.get_encoder_prompt()
         # logger.info(prompt)
         ans_dict = self.get_llm_output(
-            prompt, main_prompt._parse_encoder_answer, ['state', 'progress']
+            prompt, main_prompt._parse_encoder_answer, ['state']
         )
 
-        think = ans_dict.get('think')
-        replan = ans_dict['progress'] in ['finished', 'failed', 'not-sure']
+        # think = ans_dict.get('think')
+        # replan = ans_dict['progress'] in ['finished', 'failed', 'not-sure']
 
-        return ans_dict['state'], ans_dict['progress'], replan, think
+        return ans_dict['state']
 
     def policy(self, main_prompt):
         prompt = main_prompt.get_policy_prompt()
@@ -446,11 +446,11 @@ hover(bid: str)
         temp = self.temperature
         self.temperature = 1.0
         ans_dict = self.get_llm_output(
-            prompt, main_prompt._parse_policy_answer, ['strategy', 'summary']
+            prompt, main_prompt._parse_policy_answer, ['strategy']
         )
         self.temperature = temp
 
-        return ans_dict['strategy'], ans_dict['summary']
+        return ans_dict['strategy']
 
     def dynamics(self, main_prompt):
         prompt = main_prompt.get_dynamics_prompt()
@@ -489,11 +489,11 @@ hover(bid: str)
         ans_dict = self.get_llm_output(
             prompt,
             main_prompt._parse_effectuator_answer,
-            ['action', 'explanation', 'summary'],
+            ['action', 'explanation'],
             override_llm=False,
         )
 
-        return ans_dict['action'], ans_dict['explanation'], ans_dict['summary']
+        return ans_dict['action'], ans_dict['explanation']
 
     def step(self, env_state: State) -> Action:
         """
@@ -633,42 +633,54 @@ hover(bid: str)
             active_strategy=self.active_strategy,
         )
 
-        state, status, replan, think = self.encoder(main_prompt)
+        state = self.encoder(main_prompt)
         self.full_output = ''
         self.full_output_dict = {}
 
         logger.info(f'*State*: {state}')
-        logger.info(f'*Replan Reasoning*: {think}')
-        logger.info(f'*Replan Status*: {status}')
+        # logger.info(f'*Replan Reasoning*: {think}')
+        # logger.info(f'*Replan Status*: {status}')
 
         self.full_output_dict['obs'] = current_obs
         self.full_output_dict['state'] = state
-        self.full_output_dict['replan_reasoning'] = think
-        self.full_output_dict['replan_status'] = status
+        # self.full_output_dict['replan_reasoning'] = think
+        # self.full_output_dict['replan_status'] = status
 
         self.full_output += f'*State*: {state}\n'
-        self.full_output += f'*Replan Reasoning*: {think}\n'
-        self.full_output += f'*Replan Status*: {status}\n'
+        # self.full_output += f'*Replan Reasoning*: {think}\n'
+        # self.full_output += f'*Replan Status*: {status}\n'
 
         # replan = True
-        if len(actions) > 1 and actions[-1] == actions[-2]:
-            logger.info('*Action Repeat, Force Replan*')
-            replan = True
-        elif self.active_strategy is None or self.active_strategy_turns >= 3:
-            replan = True
+        # if len(actions) > 1 and actions[-1] == actions[-2]:
+        #     logger.info('*Action Repeat, Force Replan*')
+        #     replan = True
+        # elif self.active_strategy is None or self.active_strategy_turns >= 3:
+        #     replan = True
 
-        if replan:
-            strategy = self.planning_search(state)
-            self.strategies.append(strategy)
-            self.active_strategy = strategy
-            self.active_strategy_turns = 0
-        else:
-            self.strategies.append(None)
-            self.active_strategy_turns += 1
+        # if replan:
+        #     strategy = self.planning_search(state)
+        #     self.strategies.append(strategy)
+        #     self.active_strategy = strategy
+        #     self.active_strategy_turns = 0
+        # else:
+        #     self.strategies.append(None)
+        #     self.active_strategy_turns += 1
+        strategy = sample_action(
+            self.obs_history,
+            self.states,
+            self.strategies,
+            self.explanations,
+            self.actions,
+            self.policy,
+        )
+        self.strategies.append(strategy)
+        self.active_strategy = strategy
+        self.active_strategy_turns = 0
+
         logger.info(f'*Active Strategy*: {self.active_strategy}')
         self.full_output += f'*Active Strategy*: {self.active_strategy}\n'
 
-        self.full_output_dict['replan'] = replan
+        # self.full_output_dict['replan'] = replan
         self.full_output_dict['active_strategy'] = self.active_strategy
 
         self.states.append(state)
@@ -682,7 +694,7 @@ hover(bid: str)
             action_space=self.action_space,
         )
 
-        action, explanation, summary = self.effectuator(main_prompt)
+        action, explanation = self.effectuator(main_prompt)
         if len(actions) >= 10 and (
             (
                 actions[-1]
@@ -700,12 +712,12 @@ hover(bid: str)
 
         logger.info(f'*Action*: {action}')
         # self.full_output += f'*Action*: {action}\n'
-        logger.info(f'*Summary*: {summary}')
+        # logger.info(f'*Summary*: {summary}')
         self.full_output += f'*Action*: {explanation}\n'
-        self.full_output += f'*Summary*: {summary}\n'
+        # self.full_output += f'*Summary*: {summary}\n'
         self.full_output_dict['explanation'] = explanation
         self.full_output_dict['action'] = action
-        self.full_output_dict['summary'] = summary
+        # self.full_output_dict['summary'] = summary
 
         llm_output_logger.info(self.full_output)
         self.full_output_dict['full_output'] = self.full_output

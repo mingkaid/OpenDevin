@@ -462,11 +462,7 @@ class MyMainPrompt(PromptElement):
 Here is an abstract version of the answer with description of the content of each tag. Make sure you follow this structure, but replace the content with your answer:
 <explanation>
 Describe what the action to be taken is trying to do using a single concise sentence. Break down the active strategy into individual, manageable actions. Avoid long, complex search terms. Focus on the single action. Use first-person perspective like "I am doing something." If you encounter trouble using the search button, try hitting enter on the search box instead. If you fail to click on something, try scrolling down by 500 pixels first. If an element is no longer visible, try scrolling up by 500 pixels. Use clear and simple language to describe your action.
-</explanation>
-
-<summary>
-Based on the explanation, summarize the explanation down to with 5 words.
-</summary>
+</explanation>\
 
 <action>
 Based on the current observation, state, active strategy, and action history, select one single action to be executed. Use only one action at a time. You must not enclose bid inputs in [brackets]. Interact only with elements in the current observation. Your response will be executed as a Python function call, so ensure it adheres to the format and argument data type specifications defined in the action space.
@@ -479,16 +475,11 @@ Based on the current observation, state, active strategy, and action history, se
 Here is a concrete example of how to format your answer. Make sure to follow the template by wrapping with proper html starting and closing tags:
 <explanation>
 I am filling out the textbox for Date with 'example with "quotes"'
-</explanation>
-
-<summary>
-Filling textbox for date.
-</summary>
+</explanation>\
 
 <action>
 fill('32-12', 'example with "quotes"')
 </action>
-
 """
 
         # prompt = self.add_screenshot(prompt)
@@ -509,16 +500,7 @@ fill('32-12', 'example with "quotes"')
 Here is an abstract version of the answer with description of the content of each tag. Make sure you follow this structure, but replace the content with your answer:
 <state>
 Summarize the current state of the webpage observation, focusing on the most recent action you took and any errors encountered. Note any dialogs, progress indicators, or significant changes such as items in your cart or sites visited. Describe the impact of your previous action on the webpage, including any new interactive elements. Include any inferred information that may help achieve the goal. Information from steps earlier are for reference only. Focus on objective description of the current observation and any inferences you can draw from it. Report any error messages displayed. Do not include your next planned actions; focus solely on providing an objective summary.
-</state>\
-
-<progress>
-Evaluate your most recent action, the current state of the task, and your active strategy. Categorize the situation into one of four categories based on the progress of your strategy:
-1. "finished" - Your strategy has been successfully executed, and you will plan the next step.
-2. "in-progress" - Your strategy is still ongoing, and further actions are required.
-3. "not-sure" - It's unclear whether your strategy has been executed successfully, and you need to reassess your plan.
-4. "failed" - Your strategy was unsuccessful, and you need to develop a new plan.
-Be cautious when assigning the "in-progress" label. If uncertain, choose "not-sure" instead.
-</progress>
+</state>
 """
 
         prompt += """
@@ -535,11 +517,7 @@ Additionally, there are:
 - A section showing "Total Price: $0.00", implying the total cost updates dynamically based on selections.
 The page did not display any new errors after the latest action, apart from the timeout issue.
 I clicked the "Submit" button on the booking form, but no confirmation message appeared, and the page did not change. There is no indication whether the submission was successful or not. I need to reassess the page for any subtle changes or possible errors.
-</state>\
-
-<progress>
-not-sure
-</progress>
+</state>
 """
 
         #         The previous action resulted in a timeout error, indicating no changes were made to the page. Thus far, I have visited ABC.com and DEF.com, discovering information G and H, respectively. The current page contains a dialog with id 789 prompting whether to add protection, offering coverage options and the choices "Add Protection" or "No Thanks". A link with id 234 indicates "1 item in cart", revealing a cellphone in the cart with a subtotal of $345. I searched for a 5-night hotel stay, but results only showed availability for a 6-night stay, suggesting a 5-night stay is unavailable. The page displays:
@@ -571,10 +549,6 @@ Here is an abstract version of the answer with description of the content of eac
 <strategy>
 Given that previous actions have been completed and the environment has transitioned to the current inferred state, describe the next action to achieve the goal. Break down the goal into clear, manageable steps. Avoid using phrases such as "To accomplish the goal," "I will," "To proceed," or "Assume the previous strategies have been carried out." Refrain from mentioning specific element IDs as they may change during execution. Limit your response to one sentence and include any details that help select the correct action. Be creative and propose novel methods to achieve the goal. Avoid creating accounts without user permission or providing personal information.
 </strategy>
-
-<summary>
-Given the strategy/action that you just came up with, summarize the strategy/action down to within 5 words in 5 DIFFERENT ways, and choose ONE of them to respond.
-</summary>
 """
 
         prompt += """
@@ -584,10 +558,6 @@ Here is a concrete example of how to format your answer. Make sure to follow the
 <strategy>
 Click through the form fields to explore available options and ensure all mandatory fields are completed.
 </strategy>
-
-<summary>
-Exploring, ensure mandatory fields completed.
-</summary>
 """
 
         # prompt = self.add_screenshot(prompt)
@@ -695,7 +665,7 @@ away-from-the-goal
         ans_dict.update(
             parse_html_tags_raise(
                 text_answer,
-                keys=['action', 'explanation', 'summary'],
+                keys=['action', 'explanation'],
                 merge_multiple=True,
             )
         )
@@ -720,18 +690,14 @@ away-from-the-goal
             )
         )
         ans_dict.update(
-            parse_html_tags_raise(
-                text_answer, keys=['state', 'progress'], merge_multiple=True
-            )
+            parse_html_tags_raise(text_answer, keys=['state'], merge_multiple=True)
         )
         return ans_dict
 
     def _parse_policy_answer(self, text_answer):
         ans_dict = {}
         ans_dict.update(
-            parse_html_tags_raise(
-                text_answer, keys=['strategy', 'summary'], merge_multiple=True
-            )
+            parse_html_tags_raise(text_answer, keys=['strategy'], merge_multiple=True)
         )
         return ans_dict
 
