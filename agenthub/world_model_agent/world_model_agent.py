@@ -52,8 +52,8 @@ else:
 
 MAX_TOKENS = 32768  # added
 OUTPUT_BUFFER = 1100  # added
-# DEFAULT_BROWSER = 'https://www.google.com'  # added
-DEFAULT_BROWSER = None
+DEFAULT_BROWSER = 'https://www.rottentomatoes.com'  # added
+# DEFAULT_BROWSER = None
 
 
 client = OpenAI()
@@ -510,16 +510,16 @@ hover(bid: str)
         """
 
         # Set default first action
-        # if DEFAULT_BROWSER is not None and len(self.actions) == 0:
-        #     time.sleep(4)
-        #     action = "goto('{}')".format(DEFAULT_BROWSER)
-        #     self.actions.append(action)
-        #     return BrowseInteractiveAction(
-        #         browser_actions=action, thought='Open default browser'
-        #     )
+        if DEFAULT_BROWSER is not None and len(self.actions) == 0:
+            time.sleep(4)
+            action = "goto('{}')".format(DEFAULT_BROWSER)
+            self.actions.append(action)
+            return BrowseInteractiveAction(
+                browser_actions=action, thought='Open default browser'
+            )
         actions = self.actions
-        # if DEFAULT_BROWSER is not None:
-        #     actions = actions[1:]
+        if DEFAULT_BROWSER is not None:
+            actions = actions[1:]
 
         goal = env_state.get_current_user_intent()
         if goal is None:
@@ -629,7 +629,7 @@ hover(bid: str)
             states=self.states,
             strategies=self.strategies,
             explanations=self.explanations,
-            actions=self.actions,
+            actions=actions,
             active_strategy=self.active_strategy,
         )
 
@@ -689,7 +689,7 @@ hover(bid: str)
             states=self.states,
             strategies=self.strategies,
             explanations=self.explanations,
-            actions=self.actions,
+            actions=actions,
             active_strategy=self.active_strategy,
             action_space=self.action_space,
         )
@@ -775,9 +775,9 @@ hover(bid: str)
         def _expand(node, path):
             new_states = [n.state for n in path[:] if n.state is not None]
             new_actions = [n.action for n in path[:] if n.action is not None]
-            # actions = self.actions
-            # if DEFAULT_BROWSER is not None:
-            #     actions = actions[1:]
+            actions = self.actions
+            if DEFAULT_BROWSER is not None:
+                actions = actions[1:]
             if node.state is None:
                 # print(self.states + new_states)
                 # print(self.actions + new_actions)
@@ -786,7 +786,7 @@ hover(bid: str)
                     states=self.states + new_states,
                     strategies=self.strategies + new_actions,
                     explanations=self.explanations,
-                    actions=self.actions,
+                    actions=actions,
                 )
                 node.state, node.status, node.is_terminal = self.dynamics(main_prompt)
                 logger.info(f'*Expanded Strategy*: {node.action}')
@@ -836,7 +836,7 @@ hover(bid: str)
                             self.states + new_states,
                             self.strategies + new_actions,
                             self.explanations,
-                            self.actions,
+                            actions,
                             self.policy,
                         )
                     ] * n_actions
@@ -851,7 +851,7 @@ hover(bid: str)
                             self.states + new_states,
                             self.strategies + new_actions + [action],
                             self.explanations,
-                            self.actions,
+                            actions,
                             self.action_reward,
                         )
                         for action in sampled_actions

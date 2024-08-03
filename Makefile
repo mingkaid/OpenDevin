@@ -11,6 +11,7 @@ DEFAULT_MODEL = "gpt-4o"
 CONFIG_FILE = config.toml
 PRECOMMIT_CONFIG_PATH = "./dev_config/python/.pre-commit-config.yaml"
 PYTHON_VERSION = 3.11
+OPENAI_API_KEY = sk-1234
 
 # ANSI color codes
 GREEN=$(shell tput -Txterm setaf 2)
@@ -197,7 +198,7 @@ build-frontend:
 # Start backend
 start-backend:
 	@echo "$(YELLOW)Starting backend...$(RESET)"
-	@poetry run uvicorn opendevin.server.listen:app --port $(BACKEND_PORT) --reload --reload-exclude "workspace/*"
+	@OPENAI_API_KEY=$(OPENAI_API_KEY) poetry run uvicorn opendevin.server.listen:app --port $(BACKEND_PORT) --reload --reload-exclude "workspace/*"
 
 # Start frontend
 start-frontend:
